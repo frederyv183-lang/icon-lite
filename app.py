@@ -1,5 +1,5 @@
-﻿"""
-Веб-приложение icon-lite: запускает 1D-модель и показывает графики.
+"""
+Веб-приложение icon-lite: запускает 1D-модель и показывает анимацию эволюции.
 """
 import sys
 import os
@@ -16,11 +16,12 @@ from flask import Flask, render_template_string, request
 from grid import make_vertical_grid
 from state import make_reference_atmosphere
 from timestep import step_forward
+from animation import make_snapshots_frame
 
 app = Flask(__name__)
 
 
-HTML = """
+HTML = '''
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -40,18 +41,20 @@ HTML = """
   button:hover { background: #2c5282; }
   img { max-width: 100%; border-radius: 8px; }
   .meta { color: #555; font-size: 0.9em; }
+  a { color: #2b6cb0; }
 </style>
 </head>
 <body>
 <h1>icon-lite — 1D-модель атмосферы</h1>
 <div class="panel">
   <p>Упрощённая модель вертикальной колонки атмосферы,
-     собранная по уравнениям динамического ядра ICON.</p>
+     собранная по уравнениям динамического ядра ICON.
+     Справа показана эволюция тёплого пузыря во времени.</p>
   <form method="post">
     <label>Число уровней: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
     <label>Амплитуда θ-возмущения, К: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
     <label>Высота пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
-    <label>Шаг dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.1" min="0.05" max="2"></label>
+    <label>Шаг dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
     <label>Число шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
     <br><br>
     <button type="submit">Запустить модель</button>
@@ -60,18 +63,18 @@ HTML = """
 
 {% if image %}
 <div class="panel">
-  <h2>Результат</h2>
+  <h2>Эволюция тёплого пузыря</h2>
   <p class="meta">Финальный max|w| = {{ max_w }} м/с</p>
-  <img src="data:image/png;base64,{{ image }}" alt="Профили">
+  <img src="data:image/png;base64,{{ image }}" alt="Эволюция">
 </div>
 {% endif %}
 </body>
 </html>
-"""
+'''
 
 
 def run_model(nlev, dtheta, zbubble, dt, nsteps):
-    """Прогон модели и возврат PNG в base64."""
+    """Прогон модели и возврат PNG-сетки кадров в base64."""
     grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
     z_mc = grid["z_mc"]
     z_ifc = grid["z_ifc"]
@@ -90,12 +93,13 @@ def run_model(nlev, dtheta, zbubble, dt, nsteps):
     w = np.zeros(len(z_ifc))
     pi_pr = np.zeros_like(rho)
 
-    # снимки
-    n_snap = 4
+    # сетка снимков: 8 кадров
+    n_snap = 8
     snap_every = max(1, nsteps // n_snap)
-    times, w_hist, rho_hist, pi_hist = [], [], [], []
-    times.append(0)
-    w_hist.append(w.copy()); rho_hist.append(rho.copy()); pi_hist.append(pi_pr.copy())
+    times = [0.0]
+    w_hist = [w.copy()]
+    rho_hist = [rho.copy()]
+    pi_hist = [pi_pr.copy()]
 
     for n in range(nsteps):
         out = step_forward(rho, w, theta_v, exner_ref, theta_ref,
@@ -103,40 +107,12 @@ def run_model(nlev, dtheta, zbubble, dt, nsteps):
         rho = out["rho"]; w = out["w"]; pi_pr = out["pi_pr"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
-            w_hist.append(w.copy()); rho_hist.append(rho.copy())
+            w_hist.append(w.copy())
+            rho_hist.append(rho.copy())
             pi_hist.append(pi_pr.copy())
 
-    # графики
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
-    colors = plt.cm.viridis(np.linspace(0, 1, len(times)))
-
-    ax = axes[0]
-    for i, t in enumerate(times):
-        ax.plot(w_hist[i], z_ifc / 1000.0, color=colors[i], label=f"t={t:.0f} с")
-    ax.set_xlabel("w, м/с"); ax.set_ylabel("z, км")
-    ax.set_title("Вертикальная скорость"); ax.axvline(0, color="k", lw=0.5, alpha=0.3)
-    ax.grid(True, alpha=0.3); ax.legend(fontsize=8)
-
-    ax = axes[1]
-    for i, t in enumerate(times):
-        ax.plot(rho_hist[i], z_mc / 1000.0, color=colors[i])
-    ax.set_xlabel("ρ, кг/м³"); ax.set_ylabel("z, км")
-    ax.set_title("Плотность"); ax.grid(True, alpha=0.3)
-
-    ax = axes[2]
-    for i, t in enumerate(times):
-        ax.plot(pi_hist[i] * 1000, z_mc / 1000.0, color=colors[i])
-    ax.set_xlabel("π' × 1000"); ax.set_ylabel("z, км")
-    ax.set_title("Возмущение Exner"); ax.axvline(0, color="k", lw=0.5, alpha=0.3)
-    ax.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=100, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    image_b64 = base64.b64encode(buf.read()).decode("ascii")
-
+    image_b64 = make_snapshots_frame(w_hist, rho_hist, pi_hist,
+                                     z_ifc, z_mc, times)
     return image_b64, float(np.max(np.abs(w)))
 
 
