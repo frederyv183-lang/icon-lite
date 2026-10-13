@@ -30,6 +30,7 @@ def _run_short_1d(nsteps=100, n_snap=4):
     theta = theta_ref + 2.0 * shape
     qv = 0.010 * shape
     qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
     w = np.zeros(len(z_ifc))
 
     snap_every = max(1, nsteps // n_snap)
@@ -37,28 +38,31 @@ def _run_short_1d(nsteps=100, n_snap=4):
     w_hist = [w.copy()]
     qv_hist = [qv.copy()]
     qc_hist = [qc.copy()]
+    qr_hist = [qr.copy()]
 
     dt = 0.5
     for n in range(nsteps):
-        out = step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                            wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
                            use_diffusion=True, dx=500.0)
         rho, w = out["rho"], out["w"]
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
             w_hist.append(w.copy())
             qv_hist.append(qv.copy())
             qc_hist.append(qc.copy())
+            qr_hist.append(qr.copy())
 
-    return w_hist, qv_hist, qc_hist, z_ifc, z_mc, times
+    return w_hist, qv_hist, qc_hist, qr_hist, z_ifc, z_mc, times
 
 
 def test_animation_returns_valid_png():
     """make_snapshots_frame должен вернуть base64-строку с PNG внутри."""
-    w_hist, qv_hist, qc_hist, z_ifc, z_mc, times = _run_short_1d()
+    w_hist, qv_hist, qc_hist, qr_hist, z_ifc, z_mc, times = _run_short_1d()
 
-    b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist,
+    b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
                                 z_ifc, z_mc, times)
 
     # это строка
@@ -74,10 +78,11 @@ def test_animation_returns_valid_png():
 
 
 def test_animation_history_lengths_match():
-    """Длины историй w, qv, qc и times должны совпадать."""
-    w_hist, qv_hist, qc_hist, _, _, times = _run_short_1d()
+    """Длины историй w, qv, qc, qr и times должны совпадать."""
+    w_hist, qv_hist, qc_hist, qr_hist, _, _, times = _run_short_1d()
 
     assert len(w_hist) == len(times)
     assert len(qv_hist) == len(times)
     assert len(qc_hist) == len(times)
+    assert len(qr_hist) == len(times)
     assert len(times) >= 2

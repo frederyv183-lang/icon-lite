@@ -31,6 +31,7 @@ def _run_short_1d_with_history(nsteps=100, n_snap=4):
     theta = theta_ref + 2.0 * shape
     qv = 0.010 * shape
     qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
     w = np.zeros(len(z_ifc))
     pi_pr = np.zeros_like(rho)
 
@@ -42,11 +43,12 @@ def _run_short_1d_with_history(nsteps=100, n_snap=4):
 
     dt = 0.5
     for n in range(nsteps):
-        out = step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                            wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
                            use_diffusion=True, dx=500.0)
         rho, w = out["rho"], out["w"]
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
         pi_pr = out["pi_pr"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)

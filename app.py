@@ -73,7 +73,8 @@ HTML_1D = '''
 <div class="panel">
   <h2>Эволюция конвективного облака (1D)</h2>
   <p class="meta">max|w| = {{ max_w }} м/с | max qv = {{ max_qv }} г/кг |
-     max qc = {{ max_qc }} г/кг | max dθ = {{ max_dtheta }} K</p>
+     max qc = {{ max_qc }} г/кг | max qr = {{ max_qr }} г/кг |
+     max dθ = {{ max_dtheta }} K</p>
   <img src="data:image/png;base64,{{ image }}" alt="1D">
   <p><a href="/download/1d?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}">
      Скачать CSV</a></p>
@@ -232,24 +233,26 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
     theta = theta_ref + dtheta * shape
     qv = (qv_max / 1000.0) * shape
     qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
     w = np.zeros(len(z_ifc))
 
     n_snap = 8
     snap_every = max(1, nsteps // n_snap)
-    times = [0.0]; w_hist = [w.copy()]; qv_hist = [qv.copy()]; qc_hist = [qc.copy()]
+    times = [0.0]; w_hist = [w.copy()]; qv_hist = [qv.copy()]; qc_hist = [qc.copy()]; qr_hist = [qr.copy()]
 
     for n in range(nsteps):
-        out = step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                            wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
                            use_diffusion=use_diffusion, dx=500.0)
         rho, w = out["rho"], out["w"]
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
-            w_hist.append(w.copy()); qv_hist.append(qv.copy()); qc_hist.append(qc.copy())
+            w_hist.append(w.copy()); qv_hist.append(qv.copy()); qc_hist.append(qc.copy()); qr_hist.append(qr.copy())
 
     from animation import make_snapshots_frame
-    image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, z_ifc, z_mc, times)
+    image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist, z_ifc, z_mc, times)
 
     # w на интерфейсах (nlev+1) -> интерполируем на центры (nlev) для CSV
     w_mc = 0.5 * (w[:-1] + w[1:])
@@ -259,6 +262,7 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
         "max_w": float(np.max(np.abs(w))),
         "max_qv": float(np.max(qv)) * 1000,
         "max_qc": float(np.max(qc)) * 1000,
+        "max_qr": float(np.max(qr)) * 1000,
         "max_dtheta": float(np.max(theta - theta_ref)),
     }
     if return_profiles:
@@ -268,6 +272,7 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
             "theta": theta,
             "qv": qv,
             "qc": qc,
+            "qr": qr,
         })
     return out
 
@@ -292,6 +297,7 @@ def index():
         max_w=result["max_w"] if result else None,
         max_qv=result["max_qv"] if result else None,
         max_qc=result["max_qc"] if result else None,
+        max_qr=result["max_qr"] if result else None,
         max_dtheta=result["max_dtheta"] if result else None,
         **params,
     )
@@ -348,7 +354,7 @@ def download_1d():
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["z_m", "w_ms", "theta_K", "qv_kgkg", "qc_kgkg"])
+    writer.writerow(["z_m", "w_ms", "theta_K", "qv_kgkg", "qc_kgkg", "qr_kgkg"])
     for i in range(len(res["z_mc"])):
         writer.writerow([
             f"{res['z_mc'][i]:.2f}",
@@ -356,6 +362,7 @@ def download_1d():
             f"{res['theta'][i]:.6f}",
             f"{res['qv'][i]:.8f}",
             f"{res['qc'][i]:.8f}",
+            f"{res['qr'][i]:.8f}",
         ])
 
     return Response(

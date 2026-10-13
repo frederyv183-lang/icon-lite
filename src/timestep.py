@@ -1,4 +1,4 @@
-﻿"""
+"""
 Полный шаг по времени: динамика + влага + конденсация + турбулентность.
 """
 import numpy as np
@@ -9,12 +9,14 @@ from continuity import drho_dt
 from tracer import step_qv
 from thermo import virtual_theta
 from saturation import saturation_adjustment
+from precipitation import autoconversion, sedimentation_step, evaporation_step
 from diffusion import km_smagorinsky, diffusion_step
 
 
-def step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
+def step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                  wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
-                 use_diffusion=True, dx=500.0):
+                 use_diffusion=True, dx=500.0,
+                 qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4):
     """Один шаг по времени с турбулентной диффузией."""
     theta_v = virtual_theta(theta, qv)
     exner = diagnose_exner(rho, theta_v)
@@ -42,6 +44,20 @@ def step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
     qv_new = sat["qv"]
     qc_new = sat["qc"]
 
+    # --- Осадки (qr) ---
+    # 1. Автоконверсия qc -> qr
+    ac = autoconversion(qc_new, dt, qc_crit=qc_crit, coef=autoconv_coef)
+    qc_new = ac["qc"]
+    qr_new = qr + ac["qr"]   # добавляем прирост к уже существующему qr
+
+    # 2. Осаждение (qr падает)
+    qr_new, precip_flux = sedimentation_step(qr_new, Vt, dz, dt)
+
+    # 3. Испарение (часть qr -> qv)
+    ev = evaporation_step(qr_new, qv_new, qc_new, exner_new, dt, evap_coef=evap_coef)
+    qr_new = ev["qr"]
+    qv_new = ev["qv"]
+
     if use_diffusion:
         theta_v_diff = virtual_theta(theta_new, qv_new)
         Km = km_smagorinsky(theta_v_diff, w_new, z_mc, z_ifc, inv_dz, dz, dx=dx)
@@ -60,6 +76,8 @@ def step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
         "theta": theta_new,
         "qv": qv_new,
         "qc": qc_new,
+        "qr": qr_new,
+        "precip_flux": precip_flux,
         "theta_v": theta_v_final,
         "exner": exner_final,
         "pi_pr": perturbation(exner_final, exner_ref),
