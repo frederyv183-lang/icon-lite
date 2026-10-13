@@ -1,5 +1,5 @@
 """
-Веб-приложение icon-lite: 1D-модель атмосферы с влажностью.
+Веб-приложение icon-lite: 1D-модель атмосферы с конденсацией.
 """
 import sys
 import os
@@ -16,7 +16,6 @@ from flask import Flask, render_template_string, request
 from grid import make_vertical_grid
 from state import make_reference_atmosphere
 from timestep import step_forward
-from animation import make_snapshots_frame
 
 app = Flask(__name__)
 
@@ -44,15 +43,15 @@ HTML = '''
 </style>
 </head>
 <body>
-<h1>icon-lite — 1D-модель атмосферы</h1>
+<h1>icon-lite — 1D-модель атмосферы с конденсацией</h1>
 <div class="panel">
-  <p>Упрощённая модель вертикальной колонки атмосферы,
-     собранная по уравнениям динамического ядра ICON.
-     С учётом влажности (виртуальная температура).</p>
+  <p>Модель вертикальной колонки атмосферы по уравнениям ICON.
+     С учётом влажности и конденсации (скрытое тепло).
+     Зелёная кривая — облачная вода qc — это облако.</p>
   <form method="post">
     <label>Число уровней: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
-    <label>Амплитуда θ-возмущения, К: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
-    <label>Влажность qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="25"></label>
+    <label>θ-возмущение, К: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>Влажность qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
     <label>Высота пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
     <label>Шаг dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
     <label>Число шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
@@ -63,8 +62,13 @@ HTML = '''
 
 {% if image %}
 <div class="panel">
-  <h2>Эволюция тёплого влажного пузыря</h2>
-  <p class="meta">Финальный max|w| = {{ max_w }} м/с &nbsp;|&nbsp; max qv = {{ max_qv }} г/кг</p>
+  <h2>Эволюция конвективного облака</h2>
+  <p class="meta">
+    Финальный max|w| = {{ max_w }} м/с &nbsp;|&nbsp;
+    max qv = {{ max_qv }} г/кг &nbsp;|&nbsp;
+    max qc = {{ max_qc }} г/кг &nbsp;|&nbsp;
+    max dθ = {{ max_dtheta }} K
+  </p>
   <img src="data:image/png;base64,{{ image }}" alt="Эволюция">
 </div>
 {% endif %}
@@ -73,24 +77,24 @@ HTML = '''
 '''
 
 
-def make_frames_frame(w_hist, qv_hist, z_ifc, z_mc, times,
+def make_frames_frame(w_hist, qv_hist, qc_hist, z_ifc, z_mc, times,
                       ncols=4, figsize=(16, 8)):
     """
-    Сетка nrows x ncols: два профиля на кадр — w(z) и qv(z).
+    Сетка кадров nrows x ncols: три профиля на каждом — w, qv, qc.
     """
     n = len(times)
     nrows = (n + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols, figsize=figsize, squeeze=False)
-    fig.subplots_adjust(hspace=0.5, wspace=0.35)
+    fig.subplots_adjust(hspace=0.55, wspace=0.4)
 
     for i in range(n):
         r = i // ncols
         c = i % ncols
         ax = axes[r, c]
 
-        # две оси: w (слева) и qv (справа)
-        ax.plot(w_hist[i], z_ifc / 1000.0, color="tab:blue", lw=1.2, label="w")
-        ax.set_xlim(-3, 3)
+        # w (синий)
+        ax.plot(w_hist[i], z_ifc / 1000.0, color="tab:blue", lw=1.2)
+        ax.set_xlim(-8, 8)
         ax.set_ylim(0, 20)
         ax.axvline(0, color="k", lw=0.4, alpha=0.4)
         ax.set_title(f"t = {times[i]:.0f} с", fontsize=10)
@@ -100,15 +104,28 @@ def make_frames_frame(w_hist, qv_hist, z_ifc, z_mc, times,
             ax.set_yticklabels([])
         ax.tick_params(labelsize=8)
         ax.grid(True, alpha=0.3)
-
-        ax2 = ax.twiny()
-        ax2.plot(qv_hist[i] * 1000, z_mc / 1000.0, color="tab:red", lw=1.2,
-                 label="qv")
-        ax2.set_xlim(0, 20)
-        ax2.tick_params(labelsize=8)
-        if c == ncols - 1:
-            ax2.set_xlabel("qv, г/кг", fontsize=8, color="tab:red")
+        if c == 0 and r == nrows - 1:
             ax.set_xlabel("w, м/с", fontsize=8, color="tab:blue")
+
+        # qv (красный) на верхней оси
+        ax2 = ax.twiny()
+        ax2.plot(qv_hist[i] * 1000, z_mc / 1000.0, color="tab:red", lw=1.0,
+                 alpha=0.85)
+        ax2.set_xlim(0, 25)
+        ax2.tick_params(labelsize=8, colors="tab:red")
+        ax2.spines["top"].set_color("tab:red")
+        if c == ncols - 1 and r == 0:
+            ax2.set_xlabel("qv, г/кг", fontsize=8, color="tab:red")
+
+        # qc (зелёный) — облачная вода
+        ax3 = ax.twiny()
+        ax3.spines["top"].set_position(("axes", 1.18))
+        ax3.spines["top"].set_color("tab:green")
+        ax3.plot(qc_hist[i] * 1000, z_mc / 1000.0, color="tab:green", lw=1.4)
+        ax3.set_xlim(0, 5)
+        ax3.tick_params(labelsize=7, colors="tab:green")
+        if c == ncols - 1 and r == 0:
+            ax3.set_xlabel("qc, г/кг", fontsize=8, color="tab:green")
 
     for i in range(n, nrows * ncols):
         r = i // ncols
@@ -135,10 +152,10 @@ def run_model(nlev, dtheta, qv_max, zbubble, dt, nsteps):
     theta_ref = ref["theta_ref"]
     exner_ref = ref["exner_ref"]
 
-    # тёплая и влажная аномалия
     shape = np.exp(-((z_mc - zbubble * 1000.0) / 1500.0) ** 2)
     theta = theta_ref + dtheta * shape
-    qv = (qv_max / 1000.0) * shape  # из г/кг в кг/кг
+    qv = (qv_max / 1000.0) * shape
+    qc = np.zeros_like(theta)
 
     w = np.zeros(len(z_ifc))
 
@@ -147,42 +164,56 @@ def run_model(nlev, dtheta, qv_max, zbubble, dt, nsteps):
     times = [0.0]
     w_hist = [w.copy()]
     qv_hist = [qv.copy()]
+    qc_hist = [qc.copy()]
 
     for n in range(nsteps):
-        out = step_forward(rho, w, theta, qv, exner_ref, theta_ref,
+        out = step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
                            wgtfac_c, inv_dz, dt)
-        rho = out["rho"]; w = out["w"]; qv = out["qv"]
+        rho = out["rho"]; w = out["w"]
+        theta = out["theta"]; qv = out["qv"]; qc = out["qc"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
             w_hist.append(w.copy())
             qv_hist.append(qv.copy())
+            qc_hist.append(qc.copy())
 
-    image_b64 = make_frames_frame(w_hist, qv_hist, z_ifc, z_mc, times)
-    return image_b64, float(np.max(np.abs(w))), float(np.max(qv)) * 1000
+    image_b64 = make_frames_frame(w_hist, qv_hist, qc_hist,
+                                  z_ifc, z_mc, times)
+    return {
+        "image": image_b64,
+        "max_w": float(np.max(np.abs(w))),
+        "max_qv": float(np.max(qv)) * 1000,
+        "max_qc": float(np.max(qc)) * 1000,
+        "max_dtheta": float(np.max(theta - theta_ref)),
+    }
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     params = {
-        "nlev": 40, "dtheta": 2.0, "qv_max": 12.0,
+        "nlev": 40, "dtheta": 2.0, "qv_max": 20.0,
         "zbubble": 5.0, "dt": 0.5, "nsteps": 1200,
     }
-    image = None
-    max_w = None
-    max_qv = None
+    result = None
 
     if request.method == "POST":
         params["nlev"] = int(request.form.get("nlev", 40))
         params["dtheta"] = float(request.form.get("dtheta", 2.0))
-        params["qv_max"] = float(request.form.get("qv_max", 12.0))
+        params["qv_max"] = float(request.form.get("qv_max", 20.0))
         params["zbubble"] = float(request.form.get("zbubble", 5.0))
         params["dt"] = float(request.form.get("dt", 0.5))
         params["nsteps"] = int(request.form.get("nsteps", 1200))
+        result = run_model(**params)
 
-        image, max_w, max_qv = run_model(**params)
-
-    return render_template_string(HTML, image=image, max_w=max_w,
-                                  max_qv=max_qv, **params)
+    return render_template_string(
+        HTML,
+        image=result["image"] if result else None,
+        max_w=result["max_w"] if result else None,
+        max_qv=result["max_qv"] if result else None,
+        max_qc=result["max_qc"] if result else None,
+        max_dtheta=result["max_dtheta"] if result else None,
+        **params,
+    )
 
 
 if __name__ == "__main__":
