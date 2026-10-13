@@ -1,83 +1,63 @@
-﻿"""
-Полный шаг по времени (упрощённый, явная схема Эйлера).
-Связывает движение -> плотность -> Exner.
+"""
+Полный шаг по времени с учётом влажности.
 """
 import numpy as np
 from state import CPD, G, diagnose_exner
 from exner import perturbation, exner_at_ifc, vertical_gradient
 from motion import dw_dt_vertical
 from continuity import drho_dt
+from tracer import step_qv
+from thermo import virtual_theta
 
 
-def step_forward(rho, w, theta_v, exner_ref, theta_ref, wgtfac_c, inv_dz, dt):
+def step_forward(rho, w, theta, qv, exner_ref, theta_ref,
+                 wgtfac_c, inv_dz, dt):
     """
-    Один шаг по времени.
+    Один шаг по времени с влажностью.
     """
-    # 1. Диагностика Exner из текущих rho, theta_v
+    # 1. Виртуальная потенциальная температура (с учётом влажности)
+    theta_v = virtual_theta(theta, qv)
+
+    # 2. Диагностика Exner из rho, theta_v
     exner = diagnose_exner(rho, theta_v)
 
-    # 2. Возмущение
+    # 3. Возмущение Exner
     pi_pr = perturbation(exner, exner_ref)
 
-    # 3. Интерполяция на интерфейсы + градиент
+    # 4. Градиент Exner
     pi_ifc = exner_at_ifc(pi_pr, wgtfac_c)
-    dpi_dz = vertical_gradient(pi_ifc, inv_dz)   # размер (nlev,)
+    dpi_dz = vertical_gradient(pi_ifc, inv_dz)
 
-    # 4. Тенденция w в центрах ячеек
-    dw_dt_mc = dw_dt_vertical(theta_v, theta_ref, dpi_dz)  # (nlev,)
+    # 5. Тенденция w (используем виртуальную theta_v и опорную theta_ref)
+    dw_dt_mc = dw_dt_vertical(theta_v, theta_ref, dpi_dz)
 
-    # 5. Интерполяция тенденции на интерфейсы (nlev -> nlev+1)
+    # 6. Интерполяция тенденции на интерфейсы
     dw_dt_ifc = np.zeros(len(w))
     dw_dt_ifc[1:-1] = 0.5 * (dw_dt_mc[:-1] + dw_dt_mc[1:])
     dw_dt_ifc[0] = dw_dt_mc[0]
     dw_dt_ifc[-1] = dw_dt_mc[-1]
 
-    # 6. Обновление w
+    # 7. Обновление w
     w_new = w + dt * dw_dt_ifc
-    # граничные условия: w=0 на верхней и нижней границе (жёсткая крышка)
     w_new[0] = 0.0
     w_new[-1] = 0.0
 
-    # 7. Тенденция rho
-    drho = drho_dt(rho, w_new, inv_dz)
-
     # 8. Обновление rho
+    drho = drho_dt(rho, w_new, inv_dz)
     rho_new = rho + dt * drho
 
-    # 9. Диагностика нового Exner
-    exner_new = diagnose_exner(rho_new, theta_v)
+    # 9. Обновление qv
+    qv_new = step_qv(rho, qv, w_new, inv_dz, dt)
+
+    # 10. Диагностика нового Exner
+    theta_v_new = virtual_theta(theta, qv_new)
+    exner_new = diagnose_exner(rho_new, theta_v_new)
 
     return {
         "rho": rho_new,
         "w": w_new,
+        "qv": qv_new,
+        "theta_v": theta_v_new,
         "exner": exner_new,
         "pi_pr": perturbation(exner_new, exner_ref),
     }
-
-
-def run(rho0, w0, theta_v, exner_ref, theta_ref, wgtfac_c, inv_dz,
-        dt=1.0, nsteps=100, verbose_every=20):
-    """Прогон модели на nsteps шагов."""
-    rho = rho0.copy()
-    w = w0.copy()
-    history = []
-
-    for n in range(nsteps):
-        result = step_forward(rho, w, theta_v, exner_ref, theta_ref,
-                              wgtfac_c, inv_dz, dt)
-        rho = result["rho"]
-        w = result["w"]
-
-        if n % verbose_every == 0:
-            print(f"  шаг {n:4d}: max|w| = {np.max(np.abs(w)):.4e} м/с, "
-                  f"max|pi'| = {np.max(np.abs(result['pi_pr'])):.4e}")
-
-        history.append({
-            "t": (n + 1) * dt,
-            "rho": rho.copy(),
-            "w": w.copy(),
-            "exner": result["exner"].copy(),
-            "pi_pr": result["pi_pr"].copy(),
-        })
-
-    return history
