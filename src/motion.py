@@ -23,3 +23,22 @@ def dw_dt_vertical(theta_v, theta_ref, dpi_dz):
 def step_euler(w, dw_dt, dt):
     """Шаг по времени методом Эйлера."""
     return w + dt * dw_dt
+
+
+def dvn_dt_horizontal(theta_v_edge, dpi_dx):
+    """
+    Тенденция нормальной скорости vn от горизонтального барического градиента.
+
+    Формула:
+        dvn/dt = -c_pd * theta_v * dpi'/dx
+
+    Параметры
+    ---------
+    theta_v_edge : (nz, nx+1)  виртуальная theta на гранях
+    dpi_dx : (nz, nx+1)        горизонтальный градиент Exner
+
+    Возвращает
+    ----------
+    dvn_dt : (nz, nx+1)  тенденция vn, м/с²
+    """
+    return -CPD * theta_v_edge * dpi_dx
