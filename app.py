@@ -11,7 +11,8 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, Response
+import csv
 
 from grid import make_vertical_grid
 from grid2d import make_grid2d
@@ -74,6 +75,8 @@ HTML_1D = '''
   <p class="meta">max|w| = {{ max_w }} м/с | max qv = {{ max_qv }} г/кг |
      max qc = {{ max_qc }} г/кг | max dθ = {{ max_dtheta }} K</p>
   <img src="data:image/png;base64,{{ image }}" alt="1D">
+  <p><a href="/download/1d?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}">
+     Скачать CSV</a></p>
 </div>
 {% endif %}
 </body>
@@ -137,7 +140,8 @@ HTML_2D = '''
 '''
 
 
-def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion):
+def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
+                 return_profiles=False):
     grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
     z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
     wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
@@ -170,13 +174,26 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion):
 
     from animation import make_snapshots_frame
     image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, z_ifc, z_mc, times)
-    return {
+
+    # w на интерфейсах (nlev+1) -> интерполируем на центры (nlev) для CSV
+    w_mc = 0.5 * (w[:-1] + w[1:])
+
+    out = {
         "image": image_b64,
         "max_w": float(np.max(np.abs(w))),
         "max_qv": float(np.max(qv)) * 1000,
         "max_qc": float(np.max(qc)) * 1000,
         "max_dtheta": float(np.max(theta - theta_ref)),
     }
+    if return_profiles:
+        out.update({
+            "z_mc": z_mc,
+            "w_mc": w_mc,
+            "theta": theta,
+            "qv": qv,
+            "qc": qc,
+        })
+    return out
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -238,6 +255,39 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps)
         "max_vn": float(np.max(np.abs(vn))),
         "max_qc": float(np.max(qc)) * 1000,
     }
+
+
+@app.route("/download/1d")
+def download_1d():
+    params = {
+        "nlev": int(request.args.get("nlev", 40)),
+        "dtheta": float(request.args.get("dtheta", 2.0)),
+        "qv_max": float(request.args.get("qv_max", 20.0)),
+        "zbubble": float(request.args.get("zbubble", 5.0)),
+        "dt": float(request.args.get("dt", 0.5)),
+        "nsteps": int(request.args.get("nsteps", 1200)),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_1d(**params, return_profiles=True)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["z_m", "w_ms", "theta_K", "qv_kgkg", "qc_kgkg"])
+    for i in range(len(res["z_mc"])):
+        writer.writerow([
+            f"{res['z_mc'][i]:.2f}",
+            f"{res['w_mc'][i]:.6f}",
+            f"{res['theta'][i]:.6f}",
+            f"{res['qv'][i]:.8f}",
+            f"{res['qc'][i]:.8f}",
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_1d.csv"},
+    )
 
 
 @app.route("/2d", methods=["GET", "POST"])
