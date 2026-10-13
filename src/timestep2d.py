@@ -9,19 +9,22 @@ from continuity2d import drho_dt_2d
 from tracer import step_qv  # работает и для 2D (все операции поэлементные)
 from thermo import virtual_theta
 from saturation import saturation_adjustment
+from precipitation import autoconversion, sedimentation_step, evaporation_step
 from exner2d import (perturbation_2d, exner_at_ifc_2d,
                      vertical_gradient_2d, horizontal_gradient_2d)
 from grid2d import interp_to_edge, interp_to_center_from_edge
 
 
-def step_forward_2d(rho, w, vn, theta, qv, qc,
+def step_forward_2d(rho, w, vn, theta, qv, qc, qr,
                     exner_ref_2d, theta_ref_2d,
-                    grid, dt):
+                    grid, dt,
+                    qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4):
     """
     Один 2D-шаг по времени.
     """
     wgtfac_c = grid["wgtfac_c"]
     inv_dz = 1.0 / grid["dz"]
+    dz = grid["dz"]
     dx = grid["dx"]
     dx_edge = grid["dx_edge"]
     nz = grid["nz"]
@@ -77,6 +80,20 @@ def step_forward_2d(rho, w, vn, theta, qv, qc,
     qv_new = sat["qv"]
     qc_new = sat["qc"]
 
+    # --- Осадки (qr) ---
+    # 1. Автоконверсия qc -> qr
+    ac = autoconversion(qc_new, dt, qc_crit=qc_crit, coef=autoconv_coef)
+    qc_new = ac["qc"]
+    qr_new = qr + ac["qr"]
+
+    # 2. Осаждение (qr падает)
+    qr_new, precip_flux = sedimentation_step(qr_new, Vt, dz, dt)
+
+    # 3. Испарение (часть qr -> qv)
+    ev = evaporation_step(qr_new, qv_new, qc_new, exner_new, dt, evap_coef=evap_coef)
+    qr_new = ev["qr"]
+    qv_new = ev["qv"]
+
     # 10. Финальные диагностики
     theta_v_final = virtual_theta(theta_new, qv_new)
     exner_final = diagnose_exner(rho_new, theta_v_final)
@@ -88,6 +105,8 @@ def step_forward_2d(rho, w, vn, theta, qv, qc,
         "theta": theta_new,
         "qv": qv_new,
         "qc": qc_new,
+        "qr": qr_new,
+        "precip_flux": precip_flux,
         "theta_v": theta_v_final,
         "exner": exner_final,
         "pi_pr": perturbation_2d(exner_final, exner_ref_2d),

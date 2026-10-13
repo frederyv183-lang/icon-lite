@@ -10,9 +10,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def make_snapshots_2d(w_hist, qc_hist, x_mc, z_ifc, z_mc, times,
+def make_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
                       ncols=4, figsize=(17, 9),
-                      w_floor=1.0, qc_levels=(0.5, 1.0, 2.0)):
+                      w_floor=1.0, qc_levels=(0.5, 1.0, 2.0),
+                      qr_levels=(0.05, 0.1, 0.2)):
     """
     Сетка кадров: поле w(x,z) + контуры qc(x,z).
     """
@@ -63,6 +64,17 @@ def make_snapshots_2d(w_hist, qc_hist, x_mc, z_ifc, z_mc, times,
                     colors="lime", linewidths=1.8,
                 )
                 ax.clabel(cs, inline=True, fontsize=7, fmt="%.1f")
+
+        # контуры qr (пунктирные, синие)
+        qr_field = qr_hist[i] * 1000
+        if qr_field.max() > 0.01:
+            qr_lev = [l for l in qr_levels if l < qr_field.max()]
+            if qr_lev:
+                cs_r = ax.contour(
+                    x_km, z_km_mc, qr_field, levels=qr_lev,
+                    colors="blue", linewidths=1.4, linestyles="dashed",
+                )
+                ax.clabel(cs_r, inline=True, fontsize=6, fmt="%.2f")
 
         ax.set_ylim(0, 15)
         ax.set_xlim(x_km[0], x_km[-1])

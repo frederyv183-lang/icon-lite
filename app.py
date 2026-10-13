@@ -132,7 +132,7 @@ HTML_2D = '''
 <div class="panel">
   <h2>Эволюция конвективного облака (2D)</h2>
   <p class="meta">max|w| = {{ max_w }} м/с | max|vn| = {{ max_vn }} м/с |
-     max qc = {{ max_qc }} г/кг</p>
+     max qc = {{ max_qc }} г/кг | max qr = {{ max_qr }} г/кг</p>
   <img src="data:image/png;base64,{{ image }}" alt="2D">
 </div>
 {% endif %}
@@ -315,27 +315,30 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps)
 
     rho, w, vn = init["rho"].copy(), init["w"].copy(), init["vn"].copy()
     theta, qv, qc = init["theta"].copy(), init["qv"].copy(), init["qc"].copy()
+    qr = np.zeros_like(qc)
 
     n_snap = 8
     snap_every = max(1, nsteps // n_snap)
-    times = [0.0]; w_hist = [w.copy()]; qc_hist = [qc.copy()]
+    times = [0.0]; w_hist = [w.copy()]; qc_hist = [qc.copy()]; qr_hist = [qr.copy()]
 
     for n in range(nsteps):
-        out = step_forward_2d(rho, w, vn, theta, qv, qc,
+        out = step_forward_2d(rho, w, vn, theta, qv, qc, qr,
                               exner_ref_2d, init["theta_ref_2d"], g, dt)
         rho, w, vn = out["rho"], out["w"], out["vn"]
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
-            w_hist.append(w.copy()); qc_hist.append(qc.copy())
+            w_hist.append(w.copy()); qc_hist.append(qc.copy()); qr_hist.append(qr.copy())
 
-    image_b64 = make_snapshots_2d(w_hist, qc_hist,
+    image_b64 = make_snapshots_2d(w_hist, qc_hist, qr_hist,
                                   g["x_mc"], g["z_ifc"], g["z_mc"], times)
     return {
         "image": image_b64,
         "max_w": float(np.max(np.abs(w))),
         "max_vn": float(np.max(np.abs(vn))),
         "max_qc": float(np.max(qc)) * 1000,
+        "max_qr": float(np.max(qr)) * 1000,
     }
 
 
@@ -430,6 +433,7 @@ def index_2d():
         max_w=result["max_w"] if result else None,
         max_vn=result["max_vn"] if result else None,
         max_qc=result["max_qc"] if result else None,
+        max_qr=result["max_qr"] if result else None,
         **params,
     )
 
