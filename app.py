@@ -25,8 +25,6 @@ from plotting2d import make_snapshots_2d
 app = Flask(__name__)
 
 
-# ====================== HTML шаблоны ======================
-
 HTML_1D = '''
 <!DOCTYPE html>
 <html lang="ru">
@@ -44,6 +42,7 @@ HTML_1D = '''
            box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 1.5em; }
   label { display: inline-block; margin-right: 1em; }
   input[type=number] { width: 80px; padding: 4px; }
+  input[type=checkbox] { transform: scale(1.2); margin-left: 0.5em; }
   button { background: #2b6cb0; color: white; border: none;
            padding: 0.7em 1.5em; border-radius: 6px; cursor: pointer;
            font-size: 1em; }
@@ -56,8 +55,7 @@ HTML_1D = '''
 <h1>icon-lite — 1D-модель</h1>
 <nav><a href="/">1D вертикальная колонка</a><a href="/2d">2D конвекция</a></nav>
 <div class="panel">
-  <p>Модель вертикальной колонки атмосферы с влажностью и конденсацией.
-     Зелёная кривая — облачная вода qc.</p>
+  <p>Модель вертикальной колонки атмосферы с влажностью, конденсацией и турбулентностью.</p>
   <form method="post">
     <label>Уровни: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
     <label>dθ, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
@@ -65,6 +63,7 @@ HTML_1D = '''
     <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
     <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
     <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
+    <label>Турбулентность: <input type="checkbox" name="use_diffusion" {% if use_diffusion %}checked{% endif %}></label>
     <br><br>
     <button type="submit">Запустить 1D</button>
   </form>
@@ -110,9 +109,7 @@ HTML_2D = '''
 <h1>icon-lite — 2D-модель конвекции</h1>
 <nav><a href="/">1D вертикальная колонка</a><a href="/2d">2D конвекция</a></nav>
 <div class="panel">
-  <p>Двумерная модель в плоскости (x, z). Тёплый влажный пузырь
-     всплывает, растекается, формирует облако. Красное — восходящий поток,
-     синее — нисходящий. Зелёные контуры — облачная вода qc.</p>
+  <p>Двумерная модель в плоскости (x, z).</p>
   <form method="post">
     <label>Вертикальные уровни: <input type="number" name="nz" value="{{ nz }}" min="10" max="100"></label>
     <label>Горизонтальные ячейки: <input type="number" name="nx" value="{{ nx }}" min="20" max="200"></label>
@@ -140,12 +137,11 @@ HTML_2D = '''
 '''
 
 
-# ====================== 1D ======================
-
-def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps):
+def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion):
     grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
     z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
     wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
+    dz = grid["dz"]
 
     ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0)
     rho = ref["rho_ref"].copy()
@@ -164,14 +160,14 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps):
 
     for n in range(nsteps):
         out = step_forward(rho, w, theta, qv, qc, exner_ref, theta_ref,
-                           wgtfac_c, inv_dz, dt)
+                           wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
+                           use_diffusion=use_diffusion, dx=500.0)
         rho, w = out["rho"], out["w"]
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
         if (n + 1) % snap_every == 0 and len(times) < n_snap:
             times.append((n + 1) * dt)
             w_hist.append(w.copy()); qv_hist.append(qv.copy()); qc_hist.append(qc.copy())
 
-    # используем старую 1D-визуализацию — импортируем на месте
     from animation import make_snapshots_frame
     image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, z_ifc, z_mc, times)
     return {
@@ -186,12 +182,16 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps):
 @app.route("/", methods=["GET", "POST"])
 def index():
     params = {"nlev": 40, "dtheta": 2.0, "qv_max": 20.0,
-              "zbubble": 5.0, "dt": 0.5, "nsteps": 1200}
+              "zbubble": 5.0, "dt": 0.5, "nsteps": 1200,
+              "use_diffusion": True}
     result = None
     if request.method == "POST":
         for k in params:
-            v = request.form.get(k)
-            params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
+            if k == "use_diffusion":
+                params[k] = request.form.get(k) is not None
+            else:
+                v = request.form.get(k)
+                params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
         result = run_model_1d(**params)
     return render_template_string(
         HTML_1D,
@@ -204,17 +204,13 @@ def index():
     )
 
 
-# ====================== 2D ======================
-
 def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps):
     g = make_grid2d(nz=nz, nx=nx, x_total=x_total * 1000.0, z_top=20000.0)
-
     init = make_initial_2d(
         g, None, qv_max=qv_max / 1000.0, dtheta=dtheta,
         x0_km=x_total / 2.0, z0_km=zbubble,
         radius_x_km=radius_x, radius_z_km=1.5,
     )
-
     theta_v_ref = virtual_theta(init["theta_ref_2d"], np.zeros_like(init["qv"]))
     exner_ref_2d = diagnose_exner(init["rho"], theta_v_ref)
 
