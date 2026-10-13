@@ -30,6 +30,186 @@
   <img src="data:image/png;base64,{{ image }}" alt="1D">
   <p><a class="btn" href="/download/1d?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}">Скачать CSV</a></p>
 </div>
+
+<div class="panel">
+  <h2>Обозначения на графике</h2>
+  <p class="meta">Каждый кадр — вертикальный профиль по высоте z, км.
+     Разные кривые соответствуют разным полям атмосферы.</p>
+
+  <ul class="legend">
+    <li>
+      <span class="swatch" style="background:#1f77b4;"></span>
+      <span class="sym">w</span>
+      <span>вертикальная скорость, м/с (нижняя ось X). Положительная — вверх,
+            отрицательная — вниз. Ноль отмечен вертикальной линией.</span>
+    </li>
+    <li>
+      <span class="swatch" style="background:#d62728;"></span>
+      <span class="sym">qr</span>
+      <span>дождевая вода, г/кг (верхняя ось X, красная).
+            Появляется только когда облако созрело и началась автоконверсия
+            <code>qc &rarr; qr</code>. Осаждается со скоростью V<sub>t</sub> = 5 м/с.</span>
+    </li>
+    <li>
+      <span class="swatch" style="background:#e8eef5;border:1px solid #c9d4e0;"></span>
+      <span class="sym">&#8203;</span>
+      <span>фон — облачная вода <code>qc</code> и водяной пар <code>qv</code>
+            (численно не выводятся на этом графике, но участвуют в расчёте).</span>
+    </li>
+  </ul>
+
+  <h3>Что происходит со временем</h3>
+  <ol style="line-height:1.7;color:var(--muted);padding-left:1.5em;">
+    <li><b>t = 0 с</b> — тёплый влажный пузырь в покое, ещё нет конвекции.</li>
+    <li><b>Рост</b> — пузырь всплывает, w растёт, воздух адиабатически охлаждается.</li>
+    <li><b>Конденсация</b> — на высоте, где q<sub>v</sub> превышает q<sub>sat</sub>,
+        образуется облачная вода qc, выделяется скрытое тепло L<sub>v</sub>.</li>
+    <li><b>Осадки</b> — когда qc превышает порог автоконверсии,
+        часть переходит в qr (красные кривые), qr осаждается вниз.</li>
+    <li><b>Зрелость / распад</b> — облако растекается, w падает,
+        осадки испаряются в подсыхающем слое.</li>
+  </ol>
+</div>
+
+<div class="panel">
+  <h2>Формулы модели</h2>
+  <p class="meta">Ниже — соотношения, которые реально считаются в
+     <code>src/timestep.py</code>, <code>src/thermo.py</code>,
+     <code>src/saturation.py</code>, <code>src/diffusion.py</code>.</p>
+
+  <h3>1. Уравнение состояния (диагностика Exner)</h3>
+  <div class="formula">
+    &pi; = (&rho; &middot; R<sub>d</sub> &middot; &theta;<sub>v</sub> / p<sub>0</sub>)<sup>R<sub>d</sub>/c<sub>pd</sub></sup>
+    <span class="desc">Exner-функция; задаёт поле давления через плотность, влажность и потенциальную температуру.</span>
+  </div>
+
+  <h3>2. Виртуальная потенциальная температура</h3>
+  <div class="formula">
+    &theta;<sub>v</sub> = &theta; &middot; (1 + 1.608 &middot; q<sub>v</sub>) / (1 + q<sub>v</sub>)
+    <span class="desc">Учитывает вклад водяного пара в плавучесть: влажный воздух легче сухого при той же &theta;.</span>
+  </div>
+
+  <h3>3. Насыщение (формула Тетенса, над водой)</h3>
+  <div class="formula">
+    e<sub>s</sub>(T) = e<sub>0</sub> &middot; exp[(L<sub>v</sub>/R<sub>v</sub>) &middot; (1/T<sub>0</sub> &minus; 1/T)]<br>
+    q<sub>sat</sub>(T, p) = &epsilon; &middot; e<sub>s</sub> / (p &minus; e<sub>s</sub>)
+    <span class="desc">e<sub>0</sub> = 611 Па, T<sub>0</sub> = 273.15 K, &epsilon; = R<sub>d</sub>/R<sub>v</sub> &asymp; 0.622.
+       Упрощение: над водой, без учёта льда.</span>
+  </div>
+
+  <h3>4. Конденсация / испарение облачной воды</h3>
+  <div class="formula">
+    &Delta;q<sub>c</sub> = max(q<sub>v</sub> &minus; q<sub>sat</sub>, 0)<br>
+    &Delta;&theta; = (L<sub>v</sub> / c<sub>pd</sub>) &middot; &Delta;q<sub>c</sub> / &pi;
+    <span class="desc">Избыток пара над насыщением переходит в qc. Выделяется скрытое тепло,
+       нагревающее слой (через &pi;).</span>
+  </div>
+
+  <h3>5. Уравнение движения (вертикальное)</h3>
+  <div class="formula">
+    &part;w/&part;t = &minus;c<sub>pd</sub> &middot; &theta;<sub>v</sub> &middot; &part;&pi;&#8242;/&part;z
+       + g &middot; (&theta;<sub>v</sub> &minus; &theta;<sub>ref</sub>) / &theta;<sub>ref</sub>
+    <span class="desc">Первое слагаемое — ускорение от горизонтального градиента давления,
+       второе — плавучесть (Архимедова сила). Работаем с отклонением &pi;&#8242; = &pi; &minus; &pi;<sub>ref</sub>.</span>
+  </div>
+
+  <h3>6. Турбулентность (Смагоринский + Ri-подавление)</h3>
+  <div class="formula">
+    K<sub>m</sub> = (C<sub>s</sub> &middot; &Delta;)<sup>2</sup> &middot; |S| &middot; max(0, 1 &minus; Ri/Ri<sub>c</sub>)<br>
+    Ri = N<sup>2</sup> / |S|<sup>2</sup>, &nbsp; N<sup>2</sup> = (g/&theta;<sub>ref</sub>) &middot; &part;&theta;<sub>v</sub>/&part;z
+    <span class="desc">C<sub>s</sub> = 0.15, Ri<sub>c</sub> = 0.25. Δ — размер ячейки.
+       При устойчивой стратификации (Ri &gt; Ri<sub>c</sub>) турбулентность подавляется.</span>
+  </div>
+
+  <h3>7. Автоконверсия qc &rarr; qr и осаждение</h3>
+  <div class="formula">
+    dq<sub>r</sub> = coef &middot; max(q<sub>c</sub> &minus; q<sub>c,crit</sub>, 0) &middot; dt<br>
+    &part;q<sub>r</sub>/&part;t + V<sub>t</sub> &middot; &part;q<sub>r</sub>/&part;z = 0, &nbsp; V<sub>t</sub> = 5 м/с
+    <span class="desc">q<sub>c,crit</sub> = 5&middot;10<sup>&minus;4</sup> кг/кг, coef = 10<sup>&minus;3</sup> с<sup>&minus;1</sup>.
+       Осадки падают вниз; перенос — upwind-схема с CFL-проверкой.</span>
+  </div>
+
+  <h3>Постоянные модели</h3>
+  <table class="limits">
+    <thead>
+      <tr><th>Константа</th><th>Обозначение</th><th>Значение</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Ускорение свободного падения</td><td class="num">g</td><td class="num">9.81 м/с&sup2;</td></tr>
+      <tr><td>Газовая постоянная сухого воздуха</td><td class="num">R<sub>d</sub></td><td class="num">287.05 Дж/(кг&middot;К)</td></tr>
+      <tr><td>Теплоёмкость сухого воздуха при p = const</td><td class="num">c<sub>pd</sub></td><td class="num">1004 Дж/(кг&middot;К)</td></tr>
+      <tr><td>Удельная теплота парообразования</td><td class="num">L<sub>v</sub></td><td class="num">2.5&middot;10<sup>6</sup> Дж/кг</td></tr>
+      <tr><td>Давление на поверхности</td><td class="num">p<sub>0</sub></td><td class="num">10<sup>5</sup> Па</td></tr>
+      <tr><td>Молекулярное отношение масс (пар/сухой воздух)</td><td class="num">&epsilon;</td><td class="num">0.622</td></tr>
+    </tbody>
+  </table>
+</div>
 {% endif %}
+
+<div class="panel">
+  <h2>Допустимые пределы переменных</h2>
+  <p class="meta">Рекомендованные диапазоны для устойчивой работы модели.
+     Выход за пределы возможен, но результат может быть нефизичным или численно неустойчивым.</p>
+  <table class="limits">
+    <thead>
+      <tr>
+        <th>Переменная</th>
+        <th>Символ</th>
+        <th>Рабочий диапазон</th>
+        <th>Что вне диапазона</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Вертикальная скорость</td>
+        <td class="num">w</td>
+        <td class="num">&minus;50 &hellip; +100 м/с</td>
+        <td>CFL-нарушение, «взрыв» решения</td>
+      </tr>
+      <tr>
+        <td>Потенциальная температура</td>
+        <td class="num">&theta;</td>
+        <td class="num">250 &hellip; 350 K</td>
+        <td>Нереалистичные профили стратификации</td>
+      </tr>
+      <tr>
+        <td>Превышение &theta; над фоном</td>
+        <td class="num">d&theta;</td>
+        <td class="num">0 &hellip; 20 K</td>
+        <td>&gt;20 K &mdash; max|w| может превысить 80 м/с в 2D</td>
+      </tr>
+      <tr>
+        <td>Водяной пар</td>
+        <td class="num">q<sub>v</sub></td>
+        <td class="num">0 &hellip; 0.03 кг/кг</td>
+        <td>&gt;0.03 &mdash; экстремальная конденсация, шум</td>
+      </tr>
+      <tr>
+        <td>Облачная вода</td>
+        <td class="num">q<sub>c</sub></td>
+        <td class="num">0 &hellip; 0.01 кг/кг</td>
+        <td>Редкие всплески, численный шум</td>
+      </tr>
+      <tr>
+        <td>Дождевая вода</td>
+        <td class="num">q<sub>r</sub></td>
+        <td class="num">0 &hellip; 0.01 кг/кг</td>
+        <td>&gt;0.05 &mdash; срыв CFL по осаждению</td>
+      </tr>
+      <tr>
+        <td>Шаг по времени</td>
+        <td class="num">dt</td>
+        <td class="num">0.05 &hellip; 2 с</td>
+        <td>&gt;2 с &mdash; CFL по звуковым волнам</td>
+      </tr>
+      <tr>
+        <td>Шагов симуляции</td>
+        <td class="num">nsteps</td>
+        <td class="num">100 &hellip; 5000</td>
+        <td>&gt;5000 &mdash; минуты на рендер PNG</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
 {% endblock %}

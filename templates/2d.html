@@ -29,6 +29,168 @@
      max qc = {{ max_qc }} г/кг | max qr = {{ max_qr }} г/кг</p>
   <img src="data:image/png;base64,{{ image }}" alt="2D">
 </div>
+
+<div class="panel">
+  <h2>Обозначения на графике</h2>
+  <p class="meta">Каждый кадр — поле вертикальной скорости w(x, z).
+     Горизонтальная ось — x, км; вертикальная — z, км.</p>
+
+  <ul class="legend">
+    <li>
+      <span class="swatch" style="background:linear-gradient(90deg,#4575b4,#f7f7f7,#d73027);"></span>
+      <span class="sym">w(x,z)</span>
+      <span>поле вертикальной скорости (заливка). <b>Красный</b> — восходящий поток,
+            <b>синий</b> — нисходящий, <b>белый</b> — покой.
+            Цветовая шкала внизу графика пересчитывается для каждого кадра.</span>
+    </li>
+    <li>
+      <span class="swatch" style="background:#00c800;"></span>
+      <span class="sym">qc</span>
+      <span>изолинии облачной воды (зелёные сплошные), уровни 0.5 / 1.0 / 2.0 г/кг.
+            Показывают ядро облака.</span>
+    </li>
+    <li>
+      <span class="swatch" style="background:#1e90ff;opacity:0.7;"></span>
+      <span class="sym">qr</span>
+      <span>изолинии дождевой воды (синие пунктирные), уровни 0.05 / 0.1 / 0.2 г/кг.
+            Появляются под облаком — начало осадков.</span>
+    </li>
+  </ul>
+
+  <h3>Что происходит со временем</h3>
+  <ol style="line-height:1.7;color:var(--muted);padding-left:1.5em;">
+    <li><b>t = 0 с</b> — тёплый пузырь в покое, поле однородно.</li>
+    <li><b>Всплытие</b> — пузырь поднимается, формируется восходящий поток w.</li>
+    <li><b>Растекание</b> — по достижении уровня нейтральной плавучести
+        воздух растекается горизонтально, образуется «гриб».</li>
+    <li><b>Облако</b> — на высоте конденсации появляются зелёные контуры qc.</li>
+    <li><b>Осадки</b> — при достаточном qc включается автоконверсия,
+        появляются синие пунктиры qr под облаком.</li>
+  </ol>
+</div>
+
+<div class="panel">
+  <h2>Формулы модели (2D)</h2>
+  <p class="meta">Те же 7 соотношений, что в 1D, плюс уравнение неразрывности
+     и горизонтальная составляющая движения.</p>
+
+  <h3>1. Уравнение состояния (диагностика Exner)</h3>
+  <div class="formula">
+    &pi; = (&rho; &middot; R<sub>d</sub> &middot; &theta;<sub>v</sub> / p<sub>0</sub>)<sup>R<sub>d</sub>/c<sub>pd</sub></sup>
+    <span class="desc">Exner-функция; задаёт поле давления.</span>
+  </div>
+
+  <h3>2. Виртуальная потенциальная температура</h3>
+  <div class="formula">
+    &theta;<sub>v</sub> = &theta; &middot; (1 + 1.608 &middot; q<sub>v</sub>) / (1 + q<sub>v</sub>)
+    <span class="desc">Учёт влажности в плавучести.</span>
+  </div>
+
+  <h3>3. Насыщение (формула Тетенса, над водой)</h3>
+  <div class="formula">
+    e<sub>s</sub>(T) = e<sub>0</sub> &middot; exp[(L<sub>v</sub>/R<sub>v</sub>) &middot; (1/T<sub>0</sub> &minus; 1/T)]<br>
+    q<sub>sat</sub>(T, p) = &epsilon; &middot; e<sub>s</sub> / (p &minus; e<sub>s</sub>)
+    <span class="desc">e<sub>0</sub> = 611 Па, T<sub>0</sub> = 273.15 K, &epsilon; = 0.622.</span>
+  </div>
+
+  <h3>4. Конденсация / испарение</h3>
+  <div class="formula">
+    &Delta;q<sub>c</sub> = max(q<sub>v</sub> &minus; q<sub>sat</sub>, 0)<br>
+    &Delta;&theta; = (L<sub>v</sub> / c<sub>pd</sub>) &middot; &Delta;q<sub>c</sub> / &pi;
+    <span class="desc">Избыток пара переходит в qc, выделяется скрытое тепло.</span>
+  </div>
+
+  <h3>5. Уравнение движения (2D, вертикаль и горизонталь)</h3>
+  <div class="formula">
+    &part;w/&part;t = &minus;c<sub>pd</sub> &middot; &theta;<sub>v</sub> &middot; &part;&pi;&#8242;/&part;z
+       + g &middot; (&theta;<sub>v</sub> &minus; &theta;<sub>ref</sub>) / &theta;<sub>ref</sub><br>
+    &part;v<sub>n</sub>/&part;t = &minus;c<sub>pd</sub> &middot; &theta;<sub>v</sub> &middot; &part;&pi;&#8242;/&part;x
+    <span class="desc">Вертикаль — с плавучестью; горизонталь — только градиент давления.
+       v<sub>n</sub> живёт на вертикальных гранях ячеек.</span>
+  </div>
+
+  <h3>6. Уравнение неразрывности</h3>
+  <div class="formula">
+    &part;&rho;/&part;t = &minus;&nabla;&middot;(&rho;v)
+       = &minus;&part;(&rho;&middot;v<sub>n</sub>)/&part;x &minus; &part;(&rho;&middot;w)/&part;z
+    <span class="desc">Замыкает систему: изменение плотности связано с дивергенцией потока массы.</span>
+  </div>
+
+  <h3>7. Турбулентность (Смагоринский + Ri-подавление)</h3>
+  <div class="formula">
+    K<sub>m</sub> = (C<sub>s</sub> &middot; &Delta;)<sup>2</sup> &middot; |S| &middot; max(0, 1 &minus; Ri/Ri<sub>c</sub>)<br>
+    Ri = N<sup>2</sup> / |S|<sup>2</sup>, &nbsp; N<sup>2</sup> = (g/&theta;<sub>ref</sub>) &middot; &part;&theta;<sub>v</sub>/&part;z
+    <span class="desc">C<sub>s</sub> = 0.15, Ri<sub>c</sub> = 0.25. В 2D-версии пока не встроена
+       (см. раздел «Ограничения»).</span>
+  </div>
+
+  <h3>8. Автоконверсия qc &rarr; qr и осаждение</h3>
+  <div class="formula">
+    dq<sub>r</sub> = coef &middot; max(q<sub>c</sub> &minus; q<sub>c,crit</sub>, 0) &middot; dt<br>
+    &part;q<sub>r</sub>/&part;t + V<sub>t</sub> &middot; &part;q<sub>r</sub>/&part;z = 0, &nbsp; V<sub>t</sub> = 5 м/с
+    <span class="desc">q<sub>c,crit</sub> = 5&middot;10<sup>&minus;4</sup> кг/кг, coef = 10<sup>&minus;3</sup> с<sup>&minus;1</sup>.</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Допустимые пределы переменных (2D)</h2>
+  <p class="meta">В 2D жёстче требования к dt (CFL по горизонтали) и к max|w|
+     (горизонтальная сходимость усиливает поток).</p>
+  <table class="limits">
+    <thead>
+      <tr>
+        <th>Параметр</th>
+        <th>Символ</th>
+        <th>Рабочий диапазон</th>
+        <th>Что вне диапазона</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Вертикальные уровни</td>
+        <td class="num">nz</td>
+        <td class="num">10 &hellip; 100</td>
+        <td>&gt;100 &mdash; медленный рендер, память</td>
+      </tr>
+      <tr>
+        <td>Горизонтальные ячейки</td>
+        <td class="num">nx</td>
+        <td class="num">20 &hellip; 200</td>
+        <td>&gt;200 &mdash; рендер &gt; 30 с</td>
+      </tr>
+      <tr>
+        <td>Ширина области</td>
+        <td class="num">x_total</td>
+        <td class="num">10 &hellip; 200 км</td>
+        <td>&lt;10 км &mdash; краевые эффекты</td>
+      </tr>
+      <tr>
+        <td>Радиус пузыря по x</td>
+        <td class="num">radius_x</td>
+        <td class="num">1 &hellip; 20 км</td>
+        <td>&gt;20 км &mdash; пузырь упирается в границы</td>
+      </tr>
+      <tr>
+        <td>Шаг по времени</td>
+        <td class="num">dt</td>
+        <td class="num">0.05 &hellip; 0.5 с</td>
+        <td>&gt;0.5 с &mdash; CFL по горизонтали</td>
+      </tr>
+      <tr>
+        <td>Вертикальная скорость (макс.)</td>
+        <td class="num">max|w|</td>
+        <td class="num">0 &hellip; 100 м/с</td>
+        <td>&gt;100 м/с &mdash; неустойчивость, мусор</td>
+      </tr>
+      <tr>
+        <td>Горизонтальная скорость</td>
+        <td class="num">max|v<sub>n</sub>|</td>
+        <td class="num">0 &hellip; 50 м/с</td>
+        <td>&gt;50 м/с &mdash; шум на границах</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 {% endif %}
 
 {% endblock %}
