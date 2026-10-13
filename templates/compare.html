@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Сравнение 1D/2D — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Сравнение 1D и 2D</h1>
+
+<div class="panel">
+  <p>Одинаковые начальные условия (d&theta;, qv, z пузыря, dt).
+     Число шагов уменьшено для скорости.</p>
+  <form method="post">
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+    <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+    <br><br>
+    <button type="submit">Запустить сравнение</button>
+  </form>
+</div>
+
+{% if image_1d and image_2d %}
+<div class="panel">
+  <h2>1D — вертикальная колонка</h2>
+  <p class="meta">max|w| = {{ max_w_1d }} м/с</p>
+  <img src="data:image/png;base64,{{ image_1d }}" alt="1D">
+</div>
+
+<div class="panel">
+  <h2>2D — конвекция в плоскости (x, z)</h2>
+  <p class="meta">max|w| = {{ max_w_2d }} м/с</p>
+  <img src="data:image/png;base64,{{ image_2d }}" alt="2D">
+</div>
+
+<div class="panel">
+  <h2>Физическая интерпретация</h2>
+  <p>1D-модель изолирует вертикальное движение. 2D-модель включает
+     горизонтальное растекание, которое концентрирует плавучесть
+     и даёт более сильные восходящие потоки. Термодинамика в обеих
+     моделях идентична.</p>
+  <p class="note">Разница в max|w| — не ошибка, а физика:
+     2D захватывает больше энергии за счёт горизонтальной сходимости.</p>
+</div>
+{% endif %}
+
+{% endblock %}

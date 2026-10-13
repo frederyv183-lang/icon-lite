@@ -1,0 +1,383 @@
+/* icon-lite — общий стиль. Светлая тема, синий акцент, карточки. */
+
+:root {
+  /* Палитра вдохновлена тёплым песком и бирюзовой водой.
+     Без фотографии — только оттенки. */
+  --bg:          #f7ead3;   /* песок светлый — фон страницы */
+  --bg-soft:     #fbf3e2;   /* песок ещё светлее — подложки */
+  --panel:       #fdfaf3;   /* кремовый — карточки */
+  --text:        #2f4858;   /* глубокий slate — основной текст */
+  --muted:       #6b7f8a;   /* приглушённый — подписи */
+  --accent:      #2a9aa8;   /* бирюзовая вода — акцент */
+  --accent-hover:#1e7a86;   /* вода глубже — hover */
+  --link:        #4a8fc0;   /* небо — ссылки */
+  --border:      #e3cfa8;   /* песок тёмный — границы */
+  --radius:      10px;
+  --shadow:      0 1px 4px rgba(47, 72, 88, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5em 3em;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+h1 {
+  font-weight: 300;
+  margin: 1.2em 0 0.9em;
+  padding-left: 0.7em;
+  border-left: 4px solid var(--accent);
+  line-height: 1.2;
+}
+h2 { font-weight: 400; margin: 1em 0 0.5em; font-size: 1.25em; }
+h3 { font-weight: 500; margin: 1.2em 0 0.4em; font-size: 1.05em; }
+
+/* Навигация */
+header.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9em 1.4em;
+  margin: 1em 0 1.8em;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  flex-wrap: wrap;
+  gap: 1em;
+  position: relative;
+}
+header.navbar .brand {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 1.1em;
+  letter-spacing: 0.02em;
+}
+header.navbar nav {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+}
+header.navbar nav a {
+  position: relative;
+  padding: 0.5em 0.9em;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95em;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+header.navbar nav a:hover {
+  color: var(--link);
+  background: var(--bg-soft);
+}
+header.navbar nav a.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+header.navbar nav a.active::after {
+  content: "";
+  position: absolute;
+  left: 0.9em;
+  right: 0.9em;
+  bottom: -0.2em;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+/* Карточки */
+.panel, .card {
+  background: var(--panel);
+  padding: 1.5em;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1.5em;
+}
+
+/* Формы */
+form label {
+  display: inline-block;
+  margin-right: 1em;
+  margin-bottom: 0.5em;
+  font-size: 0.95em;
+}
+input[type=number], input[type=text] {
+  width: 90px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95em;
+  font-family: inherit;
+}
+input[type=checkbox] { transform: scale(1.2); margin-left: 0.4em; }
+
+button, .btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.7em 1.5em;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1em;
+  font-family: inherit;
+  text-decoration: none;
+  display: inline-block;
+}
+button:hover, .btn:hover { background: var(--accent-hover); }
+
+/* Изображения */
+img { max-width: 100%; border-radius: 8px; }
+
+/* Мелкий текст */
+.meta { color: var(--muted); font-size: 0.9em; }
+.note {
+  color: var(--muted);
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 0.5em;
+}
+
+/* Таблицы (для пределов переменных) */
+table.limits {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+table.limits th, table.limits td {
+  text-align: left;
+  padding: 0.5em 0.8em;
+  border-bottom: 1px solid var(--border);
+}
+table.limits th { background: var(--bg-soft); font-weight: 600; }
+table.limits td.num { font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+/* Формульные блоки */
+.formula {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  background: var(--bg-soft);
+  border-left: 3px solid var(--accent);
+  padding: 0.6em 1em;
+  margin: 0.6em 0;
+  border-radius: 4px;
+  font-size: 0.95em;
+  overflow-x: auto;
+}
+.formula .desc {
+  display: block;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.85em;
+  margin-top: 0.3em;
+  font-style: italic;
+}
+
+/* Легенда под графиком */
+ul.legend {
+  list-style: none;
+  padding: 0;
+  margin: 0.8em 0;
+  font-size: 0.92em;
+}
+ul.legend li {
+  padding: 0.25em 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+ul.legend .swatch {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+ul.legend .sym {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-weight: 600;
+  min-width: 3em;
+}
+
+/* Футер */
+footer {
+  margin-top: 3em;
+  padding-top: 1.5em;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9em;
+  text-align: center;
+}
+footer a { color: var(--link); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+/* ============================================================
+   ФУТУРИСТИЧЕСКАЯ ТЕМА (переключается кнопкой ◐ в шапке)
+   Тёмный фон, стекло, циан-неон.
+   ============================================================ */
+
+[data-theme="futuristic"] {
+  --bg:           #0a0e17;
+  --bg-soft:      #101724;
+  --panel:        rgba(20, 30, 48, 0.62);
+  --text:         #e2e8f0;
+  --muted:        #8ba3b8;
+  --accent:       #00e5ff;
+  --accent-hover: #4dffff;
+  --link:         #7dd3fc;
+  --border:       rgba(0, 229, 255, 0.28);
+  --radius:       12px;
+  --shadow:       0 0 0 1px rgba(0, 229, 255, 0.10),
+                  0 0 24px rgba(0, 229, 255, 0.14);
+}
+
+[data-theme="futuristic"] body {
+  background:
+    radial-gradient(ellipse at top, rgba(0, 229, 255, 0.06), transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(125, 211, 252, 0.05), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* Шапка — стекло + неоновая подсветка */
+[data-theme="futuristic"] header.navbar {
+  background: rgba(15, 22, 38, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+[data-theme="futuristic"] header.navbar .brand {
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.55);
+}
+
+[data-theme="futuristic"] header.navbar nav a {
+  color: var(--muted);
+}
+[data-theme="futuristic"] header.navbar nav a:hover {
+  color: var(--accent);
+  background: rgba(0, 229, 255, 0.08);
+}
+[data-theme="futuristic"] header.navbar nav a.active {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+}
+[data-theme="futuristic"] header.navbar nav a.active::after {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.85);
+}
+
+/* Панели — стекло */
+[data-theme="futuristic"] .panel,
+[data-theme="futuristic"] .card {
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+/* h1 — циановый маркер + glow */
+[data-theme="futuristic"] h1 {
+  border-left-color: var(--accent);
+  color: var(--text);
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.45);
+}
+
+/* Текст */
+[data-theme="futuristic"] .meta { color: var(--muted); }
+[data-theme="futuristic"] .note { color: var(--muted); }
+
+/* Поля ввода — тёмные */
+[data-theme="futuristic"] input[type=number],
+[data-theme="futuristic"] input[type=text] {
+  background: rgba(10, 16, 28, 0.75);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+[data-theme="futuristic"] input[type=number]:focus,
+[data-theme="futuristic"] input[type=text]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 229, 255, 0.25);
+}
+
+/* Кнопки — неон */
+[data-theme="futuristic"] button,
+[data-theme="futuristic"] .btn {
+  background: linear-gradient(180deg, #00e5ff, #00b8d4);
+  color: #04131a;
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.45);
+  border: none;
+}
+[data-theme="futuristic"] button:hover,
+[data-theme="futuristic"] .btn:hover {
+  background: linear-gradient(180deg, #4dffff, #00d4e8);
+  box-shadow: 0 0 22px rgba(0, 229, 255, 0.75);
+}
+
+/* Тогл-кнопка темы — минималистичная, не наследует неон */
+[data-theme="futuristic"] .theme-toggle,
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: none;
+  padding: 0.35em 0.6em;
+  font-size: 1em;
+  line-height: 1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+[data-theme="futuristic"] .theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-soft);
+}
+
+/* Таблицы */
+[data-theme="futuristic"] table.limits th {
+  background: rgba(0, 229, 255, 0.08);
+  color: var(--text);
+  border-bottom-color: var(--border);
+}
+[data-theme="futuristic"] table.limits td {
+  border-bottom-color: var(--border);
+}
+
+/* Формульные блоки */
+[data-theme="futuristic"] .formula {
+  background: rgba(0, 229, 255, 0.06);
+  border-left-color: var(--accent);
+  color: var(--text);
+}
+[data-theme="futuristic"] .formula .desc { color: var(--muted); }
+
+/* Изображения (графики) — лёгкая рамка */
+[data-theme="futuristic"] img {
+  border: 1px solid var(--border);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.15);
+}
+
+/* Футер */
+[data-theme="futuristic"] footer {
+  border-top-color: var(--border);
+  color: var(--muted);
+}
+[data-theme="futuristic"] footer a { color: var(--link); }

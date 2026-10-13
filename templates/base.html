@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}icon-lite{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<script>
+// Раннее применение темы — до отрисовки body, чтобы не мигало
+(function () {
+  var saved = localStorage.getItem("icon-lite-theme") || "light";
+  if (saved === "futuristic") {
+    document.documentElement.setAttribute("data-theme", "futuristic");
+  }
+})();
+</script>
+<header class="navbar">
+  <a href="/" class="brand" style="text-decoration:none;">icon-lite</a>
+  <nav>
+    <a href="/"{% if active == '1d' %} class="active"{% endif %}>1D колонка</a>
+    <a href="/2d"{% if active == '2d' %} class="active"{% endif %}>2D конвекция</a>
+    <a href="/compare"{% if active == 'compare' %} class="active"{% endif %}>Сравнение</a>
+    <a href="https://github.com/frederyv183-lang/icon-lite" target="_blank" rel="noopener">GitHub</a>
+    <button id="theme-toggle" class="theme-toggle" type="button"
+            title="Переключить тему" aria-label="Переключить тему">☾</button>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+  icon-lite — минимальная реализация динамического ядра ICON.
+  Лицензия MIT. <a href="https://github.com/frederyv183-lang/icon-lite" target="_blank" rel="noopener">Исходники на GitHub</a>.
+</footer>
+<script>
+(function () {
+  const KEY = "icon-lite-theme";
+  const root = document.documentElement;
+  const btn = document.getElementById("theme-toggle");
+
+  // Синхронизация иконки с текущим состоянием
+  function syncIcon() {
+    if (!btn) return;
+    if (root.getAttribute("data-theme") === "futuristic") {
+      btn.textContent = "☀";
+    } else {
+      btn.textContent = "☾";
+    }
+  }
+  syncIcon();
+
+  if (btn) {
+    btn.addEventListener("click", function () {
+      const cur = root.getAttribute("data-theme") === "futuristic" ? "futuristic" : "light";
+      const next = cur === "futuristic" ? "light" : "futuristic";
+      // Сохраняем в localStorage и в cookie (для сервера)
+      localStorage.setItem(KEY, next);
+      document.cookie = "icon_lite_theme=" + next + "; path=/; max-age=31536000; SameSite=Lax";
+      // Перезагружаем страницу — Flask перерисует график в нужной палитре
+      location.reload();
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -13,10 +13,31 @@ import numpy as np
 def make_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
                       ncols=4, figsize=(17, 9),
                       w_floor=1.0, qc_levels=(0.5, 1.0, 2.0),
-                      qr_levels=(0.05, 0.1, 0.2)):
+                      qr_levels=(0.05, 0.1, 0.2), dark=False):
     """
     Сетка кадров: поле w(x,z) + контуры qc(x,z).
     """
+    n = len(times)
+    nrows = (n + ncols - 1) // ncols
+
+    # Выбор стиля в зависимости от темы
+    style = "dark_background" if dark else "default"
+    grid_color = "#00e5ff" if dark else "k"
+    zero_color = "#00e5ff" if dark else "k"
+    qr_contour_color = "#7dd3fc" if dark else "blue"
+
+    with plt.style.context(style):
+        return _draw_snapshots_2d(
+            w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
+            ncols, figsize, w_floor, qc_levels, qr_levels,
+            dark, zero_color, qr_contour_color,
+        )
+
+
+def _draw_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
+                       ncols, figsize, w_floor, qc_levels, qr_levels,
+                       dark, zero_color, qr_contour_color):
+    """Внутренняя функция — рисует 2D-снимки в текущем стиле."""
     n = len(times)
     nrows = (n + ncols - 1) // ncols
 
@@ -72,7 +93,7 @@ def make_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
             if qr_lev:
                 cs_r = ax.contour(
                     x_km, z_km_mc, qr_field, levels=qr_lev,
-                    colors="blue", linewidths=1.4, linestyles="dashed",
+                    colors=qr_contour_color, linewidths=1.4, linestyles="dashed",
                 )
                 ax.clabel(cs_r, inline=True, fontsize=6, fmt="%.2f")
 

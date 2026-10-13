@@ -9,7 +9,7 @@ import numpy as np
 
 def make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
                          z_ifc, z_mc, times,
-                         ncols=4, figsize=(16, 8)):
+                         ncols=4, figsize=(16, 8), dark=False):
     """
     Рисует сетку кадров nrows x ncols: для каждого снимка три профиля
     (w, qv, qc) и опционально qr (красная линия).
@@ -26,6 +26,24 @@ def make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
 
     Возвращает base64-строку PNG.
     """
+    style = "dark_background" if dark else "default"
+    zero_color = "#00e5ff" if dark else "k"
+    grid_color = "#00e5ff" if dark else "k"
+
+    with plt.style.context(style):
+        return _draw_snapshots_frame(
+            w_hist, qv_hist, qc_hist, qr_hist,
+            z_ifc, z_mc, times,
+            ncols, figsize,
+            dark, zero_color, grid_color,
+        )
+
+
+def _draw_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
+                          z_ifc, z_mc, times,
+                          ncols, figsize,
+                          dark, zero_color, grid_color):
+    """Внутренняя функция — рисует 1D-снимки в текущем стиле."""
     n = len(times)
     nrows = (n + ncols - 1) // ncols
     fig, axes = plt.subplots(nrows, ncols,
@@ -65,7 +83,7 @@ def make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
 
         ax.set_xlim(-8.5, 8.5)
         ax.set_ylim(0, 20)
-        ax.axvline(0, color="k", lw=0.4, alpha=0.4)
+        ax.axvline(0, color=zero_color, lw=0.4, alpha=0.6)
         ax.grid(True, alpha=0.3)
         ax.set_title(f"t = {times[i]:.0f} с", fontsize=10)
         if c == 0:

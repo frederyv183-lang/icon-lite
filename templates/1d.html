@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}1D колонка — icon-lite{% endblock %}
+{% block content %}
+
+<h1>1D — вертикальная колонка</h1>
+
+<div class="panel">
+  <p>Модель вертикальной колонки атмосферы с влажностью, конденсацией
+     и турбулентностью. Один столбец, гравитация + плавучесть,
+     без горизонтальных движений.</p>
+  <form method="post">
+    <label>Уровни: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+    <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+    <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
+    <label>Турбулентность: <input type="checkbox" name="use_diffusion" {% if use_diffusion %}checked{% endif %}></label>
+    <br><br>
+    <button type="submit">Запустить 1D</button>
+  </form>
+</div>
+
+{% if image %}
+<div class="panel">
+  <h2>Эволюция конвективного облака (1D)</h2>
+  <p class="meta">max|w| = {{ max_w }} м/с | max qv = {{ max_qv }} г/кг |
+     max qc = {{ max_qc }} г/кг | max qr = {{ max_qr }} г/кг |
+     max d&theta; = {{ max_dtheta }} K</p>
+  <img src="data:image/png;base64,{{ image }}" alt="1D">
+  <p><a class="btn" href="/download/1d?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}">Скачать CSV</a></p>
+</div>
+{% endif %}
+
+{% endblock %}

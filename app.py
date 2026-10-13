@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from flask import Flask, render_template_string, request, Response
+from flask import Flask, render_template, render_template_string, request, Response
 import csv
 
 from grid import make_vertical_grid
@@ -24,6 +24,11 @@ from thermo import virtual_theta
 from plotting2d import make_snapshots_2d
 
 app = Flask(__name__)
+
+
+def _is_dark():
+    """True, если активна футуристическая (тёмная) тема."""
+    return request.cookies.get("icon_lite_theme") == "futuristic"
 
 
 HTML_1D = '''
@@ -218,7 +223,7 @@ HTML_COMPARE = '''
 
 
 def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
-                 return_profiles=False):
+                 return_profiles=False, dark=False):
     grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
     z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
     wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
@@ -252,7 +257,8 @@ def run_model_1d(nlev, dtheta, qv_max, zbubble, dt, nsteps, use_diffusion,
             w_hist.append(w.copy()); qv_hist.append(qv.copy()); qc_hist.append(qc.copy()); qr_hist.append(qr.copy())
 
     from animation import make_snapshots_frame
-    image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist, z_ifc, z_mc, times)
+    image_b64 = make_snapshots_frame(w_hist, qv_hist, qc_hist, qr_hist,
+                                     z_ifc, z_mc, times, dark=dark)
 
     # w на интерфейсах (nlev+1) -> интерполируем на центры (nlev) для CSV
     w_mc = 0.5 * (w[:-1] + w[1:])
@@ -289,10 +295,16 @@ def index():
                 params[k] = request.form.get(k) is not None
             else:
                 v = request.form.get(k)
-                params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
-        result = run_model_1d(**params)
-    return render_template_string(
-        HTML_1D,
+                if v is None or v.strip() == "":
+                    continue  # оставить дефолт из params
+                try:
+                    params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
+                except (TypeError, ValueError):
+                    continue  # некорректное значение -> дефолт
+        result = run_model_1d(**params)  # графики всегда светлые
+    return render_template(
+        "1d.html",
+        active="1d",
         image=result["image"] if result else None,
         max_w=result["max_w"] if result else None,
         max_qv=result["max_qv"] if result else None,
@@ -303,7 +315,8 @@ def index():
     )
 
 
-def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps):
+def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps,
+                 dark=False):
     g = make_grid2d(nz=nz, nx=nx, x_total=x_total * 1000.0, z_top=20000.0)
     init = make_initial_2d(
         g, None, qv_max=qv_max / 1000.0, dtheta=dtheta,
@@ -332,7 +345,8 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps)
             w_hist.append(w.copy()); qc_hist.append(qc.copy()); qr_hist.append(qr.copy())
 
     image_b64 = make_snapshots_2d(w_hist, qc_hist, qr_hist,
-                                  g["x_mc"], g["z_ifc"], g["z_mc"], times)
+                                  g["x_mc"], g["z_ifc"], g["z_mc"], times,
+                                  dark=dark)
     return {
         "image": image_b64,
         "max_w": float(np.max(np.abs(w))),
@@ -382,7 +396,13 @@ def compare():
     result_1d = result_2d = None
     if request.method == "POST":
         for k in params:
-            params[k] = float(request.form.get(k, params[k]))
+            v = request.form.get(k)
+            if v is None or v.strip() == "":
+                continue
+            try:
+                params[k] = float(v)
+            except (TypeError, ValueError):
+                continue
 
         result_1d = run_model_1d(
             nlev=40,
@@ -404,8 +424,9 @@ def compare():
             nsteps=400,
         )
 
-    return render_template_string(
-        HTML_COMPARE,
+    return render_template(
+        "compare.html",
+        active="compare",
         image_1d=result_1d["image"] if result_1d else None,
         image_2d=result_2d["image"] if result_2d else None,
         max_w_1d=result_1d["max_w"] if result_1d else None,
@@ -425,10 +446,16 @@ def index_2d():
     if request.method == "POST":
         for k in params:
             v = request.form.get(k)
-            params[k] = int(v) if k in ("nz", "nx", "nsteps") else float(v)
-        result = run_model_2d(**params)
-    return render_template_string(
-        HTML_2D,
+            if v is None or v.strip() == "":
+                continue  # оставить дефолт
+            try:
+                params[k] = int(v) if k in ("nz", "nx", "nsteps") else float(v)
+            except (TypeError, ValueError):
+                continue
+        result = run_model_2d(**params)  # графики всегда светлые
+    return render_template(
+        "2d.html",
+        active="2d",
         image=result["image"] if result else None,
         max_w=result["max_w"] if result else None,
         max_vn=result["max_vn"] if result else None,

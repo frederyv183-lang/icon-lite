@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}2D конвекция — icon-lite{% endblock %}
+{% block content %}
+
+<h1>2D — конвекция в плоскости (x, z)</h1>
+
+<div class="panel">
+  <p>Двумерная модель в плоскости (x, z). Всплывающий тёплый пузырь,
+     горизонтальное растекание, формирование облака и осадки.</p>
+  <form method="post">
+    <label>Вертикальные уровни: <input type="number" name="nz" value="{{ nz }}" min="10" max="100"></label>
+    <label>Горизонтальные ячейки: <input type="number" name="nx" value="{{ nx }}" min="20" max="200"></label>
+    <label>Ширина области, км: <input type="number" name="x_total" value="{{ x_total }}" step="5" min="10" max="200"></label>
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+    <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
+    <label>радиус x, км: <input type="number" name="radius_x" value="{{ radius_x }}" step="0.5" min="1" max="20"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+    <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="2000"></label>
+    <br><br>
+    <button type="submit">Запустить 2D</button>
+  </form>
+</div>
+
+{% if image %}
+<div class="panel">
+  <h2>Эволюция конвективного облака (2D)</h2>
+  <p class="meta">max|w| = {{ max_w }} м/с | max|vn| = {{ max_vn }} м/с |
+     max qc = {{ max_qc }} г/кг | max qr = {{ max_qr }} г/кг</p>
+  <img src="data:image/png;base64,{{ image }}" alt="2D">
+</div>
+{% endif %}
+
+{% endblock %}
