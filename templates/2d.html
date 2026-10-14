@@ -275,4 +275,16 @@
 </div>
 {% endif %}
 
+{% if image_3d %}
+<div class="panel">
+  <h2>w(x, z) — 3D</h2>
+  <img src="data:image/png;base64,{{ image_3d }}" alt="2D snapshots 3D"
+       style="max-width: 100%; height: auto;">
+  <p style="margin-top: 1em;">
+    <a href="/download/2d.3d.png?nz={{ nz }}&nx={{ nx }}&x_total={{ x_total }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&radius_x={{ radius_x }}&dt={{ dt }}&nsteps={{ nsteps }}"
+       class="button-link">Скачать PNG-3D</a>
+  </p>
+</div>
+{% endif %}
+
 {% endblock %}

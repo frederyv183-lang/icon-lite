@@ -358,12 +358,17 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps,
     image_b64 = make_snapshots_2d(w_hist, qc_hist, qr_hist,
                                   g["x_mc"], g["z_ifc"], g["z_mc"], times,
                                   dark=dark)
+    from plotting2d import make_snapshots_2d_3d
+    image_3d_b64 = make_snapshots_2d_3d(w_hist, qc_hist, qr_hist,
+                                        g["x_mc"], g["z_ifc"], g["z_mc"], times,
+                                        dark=dark)
 
     # w на интерфейсах (nz+1,) -> интерполируем на центры (nz,) для CSV
     w_mc = 0.5 * (w[:-1] + w[1:])
 
     out = {
         "image": image_b64,
+        "image_3d": image_3d_b64,
         "max_w": float(np.max(np.abs(w))),
         "max_vn": float(np.max(np.abs(vn))),
         "max_qc": float(np.max(qc)) * 1000,
@@ -735,12 +740,23 @@ def run_model_2d_storm(nz, nx, x_total, dtheta, qv_max,
                                   dark=dark,
                                   traffic=metrics["traffic"])
 
+    from plotting_storm2d import make_storm2d_map_3d
+    map3d_png = make_storm2d_map_3d(x_mc, z_mc, cape_res["cape_2d"],
+                                    dark=dark,
+                                    cape_max=metrics["cape_max"],
+                                    cape_mean=metrics["cape_mean"],
+                                    lfc_x=cape_res["lfc_x"],
+                                    el_x=cape_res["el_x"],
+                                    traffic=metrics["traffic"])
+
     import base64 as _b64
     out_dict = {
         "image": _b64.b64encode(map_png).decode("ascii"),
         "image_pr": _b64.b64encode(pr_png).decode("ascii"),
+        "image_3d": _b64.b64encode(map3d_png).decode("ascii"),
         "png_map_bytes": map_png,
         "png_profile_bytes": pr_png,
+        "png_map3d_bytes": map3d_png,
         "cape_max": metrics["cape_max"],
         "cape_mean": metrics["cape_mean"],
         "cape_min": metrics["cape_min"],
@@ -790,6 +806,7 @@ def storm2d_route():
         "storm2d.html",
         image=result["image"] if result else None,
         image_pr=result["image_pr"] if result else None,
+        image_3d=result["image_3d"] if result else None,
         cape_max=round(result["cape_max"], 1) if result else None,
         cape_mean=round(result["cape_mean"], 1) if result else None,
         cape_min=round(result["cape_min"], 1) if result else None,
@@ -894,6 +911,47 @@ def download_storm2d_png():
         mimetype="image/png",
         headers={"Content-Disposition":
                  "attachment; filename=icon_lite_storm2d_map.png"},
+    )
+
+
+@app.route("/download/storm2d.map3d.png")
+def download_storm2d_map3d():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 30),
+        "nx": _get_int("nx", 40),
+        "x_total": _get_float("x_total", 20.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 2.0),
+        "radius_x": _get_float("radius_x", 4.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_2d_storm(**params)
+    return Response(
+        res["png_map3d_bytes"],
+        mimetype="image/png",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm2d_map3d.png"},
     )
 
 
@@ -1042,6 +1100,49 @@ def download_2d():
     )
 
 
+@app.route("/download/2d.3d.png")
+def download_2d_3d():
+    import base64 as _b64
+
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 40),
+        "nx": _get_int("nx", 80),
+        "x_total": _get_float("x_total", 40.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 3.0),
+        "radius_x": _get_float("radius_x", 5.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 800),
+    }
+    res = run_model_2d(**params)
+    png_bytes = _b64.b64decode(res["image_3d"])
+    return Response(
+        png_bytes,
+        mimetype="image/png",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_2d_snapshots_3d.png"},
+    )
+
+
 @app.route("/compare", methods=["GET", "POST"])
 def compare():
     params = {"dtheta": 2.0, "qv_max": 20.0, "zbubble": 3.0, "dt": 0.5}
@@ -1109,6 +1210,7 @@ def index_2d():
         "2d.html",
         active="2d",
         image=result["image"] if result else None,
+        image_3d=result["image_3d"] if result else None,
         max_w=result["max_w"] if result else None,
         max_vn=result["max_vn"] if result else None,
         max_qc=result["max_qc"] if result else None,

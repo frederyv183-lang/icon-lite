@@ -10,6 +10,91 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+# ---------------------------------------------------------------------
+#  3D-визуализация: CAPE(x, z) как поверхность
+# ---------------------------------------------------------------------
+
+def make_storm2d_map_3d(x_mc, z_mc, cape_2d, dark=False,
+                        cape_max=None, cape_mean=None,
+                        lfc_x=None, el_x=None, traffic=None,
+                        elev=28.0, azim=-60.0):
+    """
+    3D-поверхность CAPE(x, z). Возвращает bytes PNG.
+    """
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+
+    if dark:
+        plt.style.use("dark_background")
+        bg = "#0d1117"
+        fg = "#e6edf3"
+        grid = "#30363d"
+    else:
+        plt.style.use("default")
+        bg = "#ffffff"
+        fg = "#1f2328"
+        grid = "#d0d7de"
+
+    x_km = x_mc / 1000.0
+    z_km = z_mc / 1000.0
+
+    cmax = float(np.max(cape_2d)) if cape_2d.size > 0 else 1.0
+    if cmax <= 0.0:
+        cmax = 1.0
+
+    fig = plt.figure(figsize=(10.0, 6.4), facecolor=bg)
+    ax = fig.add_subplot(111, projection="3d")
+    ax.set_facecolor(bg)
+
+    X, Z = np.meshgrid(x_km, z_km)  # (nz, nx)
+
+    surf = ax.plot_surface(
+        X, Z, cape_2d,
+        cmap="YlOrRd", vmin=0.0, vmax=cmax,
+        linewidth=0, antialiased=True, alpha=0.95,
+        rstride=1, cstride=1,
+    )
+
+    if lfc_x is not None and el_x is not None:
+        lfc_km = np.where(np.isfinite(lfc_x), lfc_x / 1000.0, np.nan)
+        el_km = np.where(np.isfinite(el_x), el_x / 1000.0, np.nan)
+        valid = np.isfinite(lfc_km) & np.isfinite(el_km)
+        if np.any(valid):
+            n_valid = int(np.sum(valid))
+            ax.scatter(lfc_km[valid], np.zeros(n_valid), np.zeros(n_valid),
+                       c="#2563eb", s=8, depthshade=False, label="LFC")
+            ax.scatter(el_km[valid], np.zeros(n_valid), np.zeros(n_valid),
+                       c="#7c3aed", s=8, depthshade=False, label="EL")
+            ax.legend(loc="upper right", fontsize=8,
+                      facecolor=bg, edgecolor=grid, labelcolor=fg)
+
+    ax.set_xlabel("x, км", color=fg, labelpad=8)
+    ax.set_ylabel("z, км", color=fg, labelpad=8)
+    ax.set_zlabel("CAPE, Дж/кг", color=fg, labelpad=8)
+
+    title = "CAPE(x, z) — 3D"
+    if cape_max is not None and cape_mean is not None:
+        title += f"   max={cape_max:.0f}  mean={cape_mean:.0f} Дж/кг"
+    ax.set_title(title, color=fg, fontsize=11)
+
+    ax.tick_params(colors=fg, labelsize=8)
+    for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
+        pane.pane.set_facecolor(bg)
+        pane.pane.set_edgecolor(grid)
+
+    ax.view_init(elev=elev, azim=azim)
+    ax.grid(True, color=grid, alpha=0.4)
+
+    cb = fig.colorbar(surf, ax=ax, shrink=0.6, pad=0.10, aspect=18)
+    cb.set_label("CAPE, Дж/кг", color=fg)
+    cb.ax.tick_params(colors=fg)
+
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, facecolor=bg)
+    plt.close(fig)
+    return buf.getvalue()
+
 def make_storm2d_map(x_mc, z_mc, cape_2d, dark=False,
                      cape_max=None, cape_mean=None,
                      lfc_x=None, el_x=None, traffic=None):

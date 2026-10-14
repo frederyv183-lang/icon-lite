@@ -34,6 +34,104 @@ def make_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
         )
 
 
+# ---------------------------------------------------------------------
+#  3D-снимки: сетка кадров w(x, z) через plot_surface
+# ---------------------------------------------------------------------
+
+def make_snapshots_2d_3d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
+                         ncols=4, figsize=(18, 10),
+                         w_floor=1.0, dark=False,
+                         elev=26.0, azim=-60.0):
+    """
+    3D-сетка кадров: plot_surface(w(x,z)) с контурами qc на полу.
+
+    Возвращает base64-строку PNG (как и make_snapshots_2d).
+    """
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+
+    n = len(times)
+    nrows = (n + ncols - 1) // ncols
+
+    style = "dark_background" if dark else "default"
+    with plt.style.context(style):
+        return _draw_snapshots_2d_3d(
+            w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
+            ncols, figsize, w_floor, nrows,
+            dark, elev, azim,
+        )
+
+
+def _draw_snapshots_2d_3d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
+                          ncols, figsize, w_floor, nrows,
+                          dark, elev, azim):
+    bg = "#0d1117" if dark else "#ffffff"
+    fg = "#e6edf3" if dark else "#1f2328"
+    grid = "#30363d" if dark else "#d0d7de"
+
+    x_km = x_mc / 1000.0
+    z_km = z_mc / 1000.0
+    X, Z = np.meshgrid(x_km, z_km)  # (nz, nx)
+
+    w_max_global = max(np.max(np.abs(wh)) for wh in w_hist) or 1.0
+
+    fig = plt.figure(figsize=figsize, facecolor=bg)
+
+    for i in range(len(times)):
+        r = i // ncols
+        c = i % ncols
+        ax = fig.add_subplot(nrows, ncols, i + 1, projection="3d")
+        ax.set_facecolor(bg)
+
+        w = w_hist[i]
+        w_mc = 0.5 * (w[:-1] + w[1:])  # (nz+1, nx) -> (nz, nx)
+
+        ax.plot_surface(
+            X, Z, w_mc,
+            cmap="RdBu_r", vmin=-w_max_global, vmax=w_max_global,
+            linewidth=0, antialiased=True, alpha=0.95,
+            rstride=1, cstride=1,
+        )
+
+        qc = qc_hist[i]
+        if np.max(qc) > 0:
+            ax.contour(
+                X, Z, qc,
+                levels=[0.5e-3, 1.0e-3, 2.0e-3],
+                colors=["#7dd3fc"] if dark else ["#2563eb"],
+                linewidths=1.0, offset=0.0,
+            )
+
+        ax.set_xlabel("x, км", color=fg, fontsize=7, labelpad=2)
+        ax.set_ylabel("z, км", color=fg, fontsize=7, labelpad=2)
+        ax.set_zlabel("w, м/с", color=fg, fontsize=7, labelpad=2)
+        ax.set_title(f"t = {times[i]:.0f} с", color=fg, fontsize=9)
+
+        ax.tick_params(colors=fg, labelsize=6)
+        for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
+            pane.pane.set_facecolor(bg)
+            pane.pane.set_edgecolor(grid)
+
+        ax.view_init(elev=elev, azim=azim)
+        ax.grid(True, color=grid, alpha=0.3)
+
+    fig.subplots_adjust(left=0.04, right=0.94, top=0.94, bottom=0.06,
+                        wspace=0.05, hspace=0.10)
+
+    cax = fig.add_axes([0.955, 0.15, 0.012, 0.70])
+    sm = plt.cm.ScalarMappable(
+        cmap="RdBu_r",
+        norm=plt.Normalize(vmin=-w_max_global, vmax=w_max_global),
+    )
+    sm.set_array([])
+    cb = fig.colorbar(sm, cax=cax)
+    cb.set_label("w, м/с", color=fg)
+    cb.ax.tick_params(colors=fg)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=105, facecolor=bg)
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
 def _draw_snapshots_2d(w_hist, qc_hist, qr_hist, x_mc, z_ifc, z_mc, times,
                        ncols, figsize, w_floor, qc_levels, qr_levels,
                        dark, zero_color, qr_contour_color):
