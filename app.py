@@ -31,6 +31,8 @@ from storm import compute_cape, compute_li, storm_index
 from plotting_storm import (make_storm_profile,
                            make_storm_profile_bytes,
                            make_storm_timeseries)
+from storm2d import compute_cape_2d, storm2d_metrics
+from plotting_storm2d import make_storm2d_map, make_storm2d_profile
 
 app = Flask(__name__)
 
@@ -658,6 +660,281 @@ def download_storm_png():
         mimetype="image/png",
         headers={"Content-Disposition":
                  "attachment; filename=icon_lite_storm.png"},
+    )
+
+
+def run_model_2d_storm(nz, nx, x_total, dtheta, qv_max,
+                       zbubble, radius_x, dt, nsteps,
+                       use_diffusion=True, dark=False,
+                       return_profiles=False):
+    """
+    2D simulation + storm diagnostics (CAPE in each column).
+
+    Returns dict with:
+        image    : base64 PNG of CAPE(x, z) map
+        image_pr : base64 PNG of horizontal CAPE(x) profile
+        cape_max, cape_mean, cape_min : float
+        argmax_x : int
+        max_w    : float
+        traffic  : dict
+        lfc_min, el_max : float or None
+    """
+    from grid2d import make_grid2d
+    from state2d import make_initial_2d
+    from state import diagnose_exner
+    from thermo import virtual_theta
+    from timestep2d import step_forward_2d
+
+    g = make_grid2d(nz=nz, nx=nx, x_total=x_total * 1000.0,
+                    z_top=20000.0, stretch=1.15)
+    z_mc = g["z_mc"]
+    x_mc = g["x_mc"]
+
+    init = make_initial_2d(g, None, qv_max=qv_max / 1000.0,
+                           dtheta=dtheta,
+                           x0_km=x_total / 2.0, z0_km=zbubble,
+                           radius_x_km=radius_x, radius_z_km=1.5)
+
+    theta_ref_2d = init["theta_ref_2d"]
+    theta_v_ref_2d = virtual_theta(theta_ref_2d,
+                                   np.zeros_like(init["qv"]))
+    exner_ref_2d = diagnose_exner(init["rho"], theta_v_ref_2d)
+
+    rho = init["rho"].copy()
+    w = init["w"].copy()
+    vn = init["vn"].copy()
+    theta = init["theta"].copy()
+    qv = init["qv"].copy()
+    qc = init["qc"].copy()
+    qr = np.zeros_like(qc)
+
+    exner_now = exner_ref_2d
+    for n in range(nsteps):
+        out = step_forward_2d(rho, w, vn, theta, qv, qc, qr,
+                              exner_ref_2d, theta_ref_2d, g, dt)
+        rho, w, vn = out["rho"], out["w"], out["vn"]
+        theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
+        exner_now = out.get("exner", exner_ref_2d)
+
+    max_w = float(np.max(np.abs(w)))
+
+    # --- CAPE по всем колонкам ---
+    cape_res = compute_cape_2d(z_mc, theta, qv, exner_now)
+    metrics = storm2d_metrics(cape_res, max_w)
+
+    # --- артинки ---
+    map_png = make_storm2d_map(x_mc, z_mc, cape_res["cape_2d"],
+                               dark=dark,
+                               cape_max=metrics["cape_max"],
+                               cape_mean=metrics["cape_mean"],
+                               lfc_x=cape_res["lfc_x"],
+                               el_x=cape_res["el_x"],
+                               traffic=metrics["traffic"])
+    pr_png = make_storm2d_profile(x_mc, cape_res["cape_col"],
+                                  dark=dark,
+                                  traffic=metrics["traffic"])
+
+    import base64 as _b64
+    out_dict = {
+        "image": _b64.b64encode(map_png).decode("ascii"),
+        "image_pr": _b64.b64encode(pr_png).decode("ascii"),
+        "png_map_bytes": map_png,
+        "png_profile_bytes": pr_png,
+        "cape_max": metrics["cape_max"],
+        "cape_mean": metrics["cape_mean"],
+        "cape_min": metrics["cape_min"],
+        "argmax_x": int(cape_res["argmax_x"]),
+        "lfc_min": metrics["lfc_min"],
+        "el_max": metrics["el_max"],
+        "max_w": max_w,
+        "traffic": metrics["traffic"],
+    }
+    if return_profiles:
+        out_dict.update({
+            "z_mc": z_mc,
+            "x_mc": x_mc,
+            "cape_2d": cape_res["cape_2d"],
+            "cape_col": cape_res["cape_col"],
+            "lfc_x": cape_res["lfc_x"],
+            "el_x": cape_res["el_x"],
+            "theta": theta,
+            "qv": qv,
+            "exner": exner_now,
+        })
+    return out_dict
+
+
+@app.route("/storm2d", methods=["GET", "POST"])
+def storm2d_route():
+    params = {"nz": 30, "nx": 40, "x_total": 20.0,
+              "dtheta": 2.0, "qv_max": 20.0,
+              "zbubble": 2.0, "radius_x": 4.0,
+              "dt": 0.5, "nsteps": 200,
+              "use_diffusion": True}
+    result = None
+    if request.method == "POST":
+        for k in params:
+            if k == "use_diffusion":
+                params[k] = request.form.get(k) is not None
+            else:
+                v = request.form.get(k)
+                if v is None or v.strip() == "":
+                    continue
+                try:
+                    params[k] = int(v) if k in ("nz", "nx", "nsteps") else float(v)
+                except (TypeError, ValueError):
+                    continue
+        result = run_model_2d_storm(**params, dark=_is_dark())
+    return render_template(
+        "storm2d.html",
+        image=result["image"] if result else None,
+        image_pr=result["image_pr"] if result else None,
+        cape_max=round(result["cape_max"], 1) if result else None,
+        cape_mean=round(result["cape_mean"], 1) if result else None,
+        cape_min=round(result["cape_min"], 1) if result else None,
+        argmax_x=result["argmax_x"] if result else None,
+        lfc_min=round(result["lfc_min"], 0) if (result and result["lfc_min"] is not None) else None,
+        el_max=round(result["el_max"], 0) if (result and result["el_max"] is not None) else None,
+        max_w=round(result["max_w"], 2) if result else None,
+        traffic=result["traffic"] if result else None,
+        active="storm2d",
+        **params,
+    )
+
+
+@app.route("/download/storm2d")
+def download_storm2d():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 30),
+        "nx": _get_int("nx", 40),
+        "x_total": _get_float("x_total", 20.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 2.0),
+        "radius_x": _get_float("radius_x", 4.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_2d_storm(**params, return_profiles=True)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["x_km", "z_km", "CAPE_contrib"])
+    for j in range(len(res["x_mc"])):
+        for i in range(len(res["z_mc"])):
+            writer.writerow([
+                f"{res['x_mc'][j] / 1000.0:.3f}",
+                f"{res['z_mc'][i] / 1000.0:.3f}",
+                f"{res['cape_2d'][i, j]:.4f}",
+            ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm2d.csv"},
+    )
+
+
+@app.route("/download/storm2d.png")
+def download_storm2d_png():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 30),
+        "nx": _get_int("nx", 40),
+        "x_total": _get_float("x_total", 20.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 2.0),
+        "radius_x": _get_float("radius_x", 4.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_2d_storm(**params)
+    return Response(
+        res["png_map_bytes"],
+        mimetype="image/png",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm2d_map.png"},
+    )
+
+
+@app.route("/download/storm2d.profile.png")
+def download_storm2d_profile_png():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 30),
+        "nx": _get_int("nx", 40),
+        "x_total": _get_float("x_total", 20.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 2.0),
+        "radius_x": _get_float("radius_x", 4.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_2d_storm(**params)
+    return Response(
+        res["png_profile_bytes"],
+        mimetype="image/png",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm2d_profile.png"},
     )
 
 
