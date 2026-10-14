@@ -71,6 +71,17 @@
 </div>
 {% endif %}
 
+{% if image_ts %}
+<div class="panel">
+  <h2>Метеограмма max|w|(t)</h2>
+  <img src="data:image/png;base64,{{ image_ts }}" alt="max|w| timeseries"
+       style="max-width: 100%; height: auto;">
+  <p class="note">Показывает, как разгоняется вертикальная скорость во время симуляции.
+     Красная штриховая линия — порог грозы 15 м/с,
+     красная пунктирная — 25 м/с (сильная гроза).</p>
+</div>
+{% endif %}
+
 <div class="panel">
   <details class="collapsible">
     <summary>Физика: что такое CAPE, LI, LFC, EL</summary>

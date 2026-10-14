@@ -123,3 +123,76 @@ def make_storm_profile(*args, **kwargs):
     """Backward compat: returns base64-encoded PNG (ascii str)."""
     png_bytes = make_storm_profile_bytes(*args, **kwargs)
     return base64.b64encode(png_bytes).decode("ascii")
+
+
+
+def make_storm_timeseries(times, w_max_hist, dark=False,
+                          cape_Jkg=None, li_K=None, max_w=None):
+    """
+    Timeseries plot of max|w|(t).
+
+    Parameters
+    ----------
+    times : list[float]
+        Time points, seconds.
+    w_max_hist : list[float]
+        max|w| at each time point, m/s.
+    dark : bool
+        Use dark background.
+    cape_Jkg, li_K, max_w : float or None
+        Optional annotations.
+
+    Returns
+    -------
+    bytes
+        Raw PNG.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if dark:
+        plt.style.use("dark_background")
+        bg = "#0d1117"
+        fg = "#e6edf3"
+        grid = "#30363d"
+        col = "#f0883e"
+    else:
+        plt.style.use("default")
+        bg = "#ffffff"
+        fg = "#1f2328"
+        grid = "#d0d7de"
+        col = "#bc4c00"
+
+    fig, ax = plt.subplots(figsize=(6.5, 3.8), facecolor=bg)
+    ax.set_facecolor(bg)
+
+    t = list(times)
+    w = list(w_max_hist)
+    if len(t) > 0 and len(w) == len(t):
+        ax.plot(t, w, color=col, linewidth=2.0, marker="o",
+                markersize=4, label=r"max$|w|$")
+
+    # Reference levels
+    ax.axhline(15.0, color="#e63946", linestyle="--", linewidth=1.0,
+               alpha=0.7, label="15 м/с (гроза)")
+    ax.axhline(25.0, color="#d62828", linestyle=":", linewidth=1.0,
+               alpha=0.7, label="25 м/с (сильная)")
+
+    ax.set_xlabel("t, с", fontsize=10, color=fg)
+    ax.set_ylabel(r"max$|w|$, м/с", fontsize=10, color=fg)
+    ax.set_title("волюция вертикальной скорости", fontsize=11, color=fg)
+    ax.tick_params(colors=fg, labelsize=9)
+    for s in ax.spines.values():
+        s.set_color(grid)
+    ax.grid(True, color=grid, alpha=0.4, linewidth=0.6)
+    ax.legend(loc="upper left", fontsize=8, facecolor=bg,
+              edgecolor=grid, labelcolor=fg)
+
+    fig.tight_layout()
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=110, bbox_inches="tight",
+                facecolor=bg)
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()

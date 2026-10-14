@@ -29,7 +29,8 @@ from fog import (surface_cooling_step_2d, diagnose_fog_flag,
                  visibility_from_qc, fog_metrics)
 from storm import compute_cape, compute_li, storm_index
 from plotting_storm import (make_storm_profile,
-                           make_storm_profile_bytes)
+                           make_storm_profile_bytes,
+                           make_storm_timeseries)
 
 app = Flask(__name__)
 
@@ -555,6 +556,7 @@ def storm_route():
     return render_template(
         "storm.html",
         image=result["image"] if result else None,
+        image_ts=result["image_ts"] if result else None,
         cape=round(result["cape_Jkg"], 1) if result else None,
         li=round(result["li_K"], 2) if (result and result["li_K"] is not None) else None,
         lfc=round(result["lfc_m"], 0) if (result and result["lfc_m"] is not None) else None,
@@ -1085,6 +1087,9 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
     w = np.zeros(len(z_ifc))
 
     exner_now = exner_ref
+    times_hist = [0.0]
+    w_max_hist = [float(np.max(np.abs(w)))]
+    _snap_every = max(1, nsteps // 40)
     for n in range(nsteps):
         out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                            wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
@@ -1093,6 +1098,9 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
         theta, qv, qc = out["theta"], out["qv"], out["qc"]
         qr = out["qr"]
         exner_now = out.get("exner", exner_ref)
+        if (n + 1) % _snap_every == 0:
+            times_hist.append((n + 1) * dt)
+            w_max_hist.append(float(np.max(np.abs(w))))
 
     max_w = float(np.max(np.abs(w)))
 
@@ -1112,6 +1120,15 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
                       theta_part_surf=theta_part_surf,
                       qv_part_surf=qv_part_surf)
     traffic = storm_index(cape_info["cape_Jkg"], li_K, max_w)
+
+    image_ts_b64 = None
+    if not return_png:
+        ts_png = make_storm_timeseries(times_hist, w_max_hist, dark=dark,
+                                       cape_Jkg=cape_info["cape_Jkg"],
+                                       li_K=li_K if np.isfinite(li_K) else None,
+                                       max_w=max_w)
+        import base64 as _b64
+        image_ts_b64 = _b64.b64encode(ts_png).decode("ascii")
 
     _profile_args = dict(
         z_mc=z_mc,
@@ -1137,6 +1154,7 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
 
     out = {
         "image": image_b64,
+        "image_ts": image_ts_b64,
         "png_bytes": png_bytes,
         "cape_Jkg": float(cape_info["cape_Jkg"]),
         "li_K": float(li_K) if np.isfinite(li_K) else None,
