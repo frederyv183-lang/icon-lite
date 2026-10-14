@@ -22,6 +22,9 @@ from timestep import step_forward
 from timestep2d import step_forward_2d
 from thermo import virtual_theta
 from plotting2d import make_snapshots_2d
+from plotting_t import make_snapshots_temperature
+from diagnostics import (diagnose_temperature, temperature_celsius,
+                         extrapolate_t_2m, extract_t_metrics)
 
 app = Flask(__name__)
 
@@ -369,6 +372,160 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps,
             "qr": qr,
         })
     return out
+
+
+def run_model_1d_temperature(nlev, dtheta, qv_max, zbubble, dt, nsteps,
+                             use_diffusion, return_profiles=False):
+    """
+    1D-симуляция с диагностикой температуры T = theta * Pi.
+    Возвращает: image (профили T(z)), метрики T, и (опц.) профили для CSV.
+    """
+    grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
+    z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
+    wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
+    dz = grid["dz"]
+
+    ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0)
+    rho = ref["rho_ref"].copy()
+    theta_ref = ref["theta_ref"]
+    exner_ref = ref["exner_ref"]
+
+    shape = np.exp(-((z_mc - zbubble * 1000.0) / 1500.0) ** 2)
+    theta = theta_ref + dtheta * shape
+    qv = (qv_max / 1000.0) * shape
+    qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
+    w = np.zeros(len(z_ifc))
+
+    n_snap = 8
+    snap_every = max(1, nsteps // n_snap)
+    times = [0.0]
+    theta_hist = [theta.copy()]
+    exner_hist = [exner_ref.copy()]
+    qc_hist = [qc.copy()]
+
+    for n in range(nsteps):
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
+                           wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
+                           use_diffusion=use_diffusion, dx=500.0)
+        rho, w = out["rho"], out["w"]
+        theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
+        exner_now = out["exner"]
+
+        if (n + 1) % snap_every == 0 and len(times) < n_snap:
+            times.append((n + 1) * dt)
+            theta_hist.append(theta.copy())
+            exner_hist.append(exner_now.copy())
+            qc_hist.append(qc.copy())
+
+    image_b64 = make_snapshots_temperature(theta_hist, exner_hist, z_mc, times)
+
+    T_K = diagnose_temperature(theta, exner_now)
+    T_C = temperature_celsius(T_K)
+
+    metrics = extract_t_metrics(theta, exner_now, z_mc, qc)
+
+    out = {
+        "image": image_b64,
+        "T_surface_C": metrics["T_surface_C"],
+        "T_2m_C": metrics["T_2m_C"],
+        "T_cloud_C": metrics["T_cloud_C"],
+        "T_min_C": metrics["T_min_C"],
+        "T_max_C": metrics["T_max_C"],
+    }
+    if return_profiles:
+        out.update({
+            "z_mc": z_mc,
+            "T_C": T_C,
+            "theta": theta,
+            "exner": exner_now,
+            "qc": qc,
+        })
+    return out
+
+
+@app.route("/temperature", methods=["GET", "POST"])
+def temperature_route():
+    params = {"nlev": 40, "dtheta": 2.0, "qv_max": 20.0,
+              "zbubble": 5.0, "dt": 0.5, "nsteps": 1200,
+              "use_diffusion": True}
+    result = None
+    if request.method == "POST":
+        for k in params:
+            if k == "use_diffusion":
+                params[k] = request.form.get(k) is not None
+            else:
+                v = request.form.get(k)
+                if v is None or v.strip() == "":
+                    continue
+                try:
+                    params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
+                except (TypeError, ValueError):
+                    continue
+        result = run_model_1d_temperature(**params)
+    return render_template(
+        "temperature.html",
+        image=result["image"] if result else None,
+        T_surface=round(result["T_surface_C"], 2) if result else None,
+        T_2m=round(result["T_2m_C"], 2) if result else None,
+        T_cloud=round(result["T_cloud_C"], 2) if (result and result["T_cloud_C"] is not None) else None,
+        T_min=round(result["T_min_C"], 2) if result else None,
+        T_max=round(result["T_max_C"], 2) if result else None,
+        active="temperature",
+        **params,
+    )
+
+
+@app.route("/download/temperature")
+def download_temperature():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nlev": _get_int("nlev", 40),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 5.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 1200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_1d_temperature(**params, return_profiles=True)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["z_m", "T_C", "theta_K", "exner", "qc_kgkg"])
+    for i in range(len(res["z_mc"])):
+        writer.writerow([
+            f"{res['z_mc'][i]:.2f}",
+            f"{res['T_C'][i]:.4f}",
+            f"{res['theta'][i]:.6f}",
+            f"{res['exner'][i]:.8f}",
+            f"{res['qc'][i]:.8f}",
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_temperature.csv"},
+    )
 
 
 @app.route("/download/1d")

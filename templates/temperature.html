@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Температура воздуха — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Температура воздуха T(z)</h1>
+
+<div class="panel">
+  <p>Диагностика абсолютной температуры T = &theta; &middot; &pi;, где &pi; — Exner-функция.
+     На графике — профили T(z) в °C для 8 моментов времени.
+     Модель та же, что на странице 1D, но акцент — на термической структуре.</p>
+  <form method="post">
+    <label>Уровни: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+    <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="1" max="15"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+    <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
+    <label>Турбулентность: <input type="checkbox" name="use_diffusion" {% if use_diffusion %}checked{% endif %}></label>
+    <br><br>
+    <button type="submit">Запустить</button>
+  </form>
+</div>
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Входные параметры — что означают и на что влияют</summary>
+    <p class="meta">Те же параметры, что на странице 1D. Форма запускает ту же симуляцию,
+       но результат отображается как профиль температуры.</p>
+    <table class="limits">
+      <thead>
+        <tr><th>Параметр</th><th>Что означает</th><th>Влияние на T</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>nlev</code></td>
+          <td>Число уровней сетки</td>
+          <td>Больше → детальнее профиль T(z). 20–40 — оптимум.</td>
+        </tr>
+        <tr>
+          <td><code>d&theta;</code>, K</td>
+          <td>Превышение &theta; пузыря над фоном</td>
+          <td>Тёплый пузырь → T тоже выше. d&theta;=2 K даёт &asymp; +1.8 °C на уровне пузыря.</td>
+        </tr>
+        <tr>
+          <td><code>q<sub>v</sub></code>, г/кг</td>
+          <td>Начальная влажность</td>
+          <td>При конденсации выделяется L<sub>v</sub> → локальный прогрев (скрытое тепло).</td>
+        </tr>
+        <tr>
+          <td><code>z</code> пузыря, км</td>
+          <td>Высота центра пузыря</td>
+          <td>Смещает уровень максимального прогрева.</td>
+        </tr>
+        <tr>
+          <td><code>dt</code>, с</td>
+          <td>Шаг по времени</td>
+          <td>Влияет на точность, но не на физический результат.</td>
+        </tr>
+        <tr>
+          <td><code>nsteps</code></td>
+          <td>Число шагов</td>
+          <td>Общее время = dt &middot; nsteps. Больше → дальше эволюция.</td>
+        </tr>
+        <tr>
+          <td>Турбулентность</td>
+          <td>Смагоринский + Ri</td>
+          <td>Сглаживает пики T — профиль становится плавнее.</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
+</div>
+
+{% if image %}
+<div class="panel">
+  <h2>Профили T(z) в °C</h2>
+  <p class="meta">
+    T у поверхности: <b>{{ T_surface }} °C</b> &nbsp;|&nbsp;
+    T на 2 м: <b>{{ T_2m }} °C</b>
+    {% if T_cloud is not none %}&nbsp;|&nbsp;
+    T на уровне облака: <b>{{ T_cloud }} °C</b>{% endif %}
+    &nbsp;|&nbsp;
+    T<sub>min</sub>: {{ T_min }} °C &nbsp;|&nbsp;
+    T<sub>max</sub>: {{ T_max }} °C
+  </p>
+  <img src="data:image/png;base64,{{ image }}" alt="T(z)">
+  <p><a class="btn" href="/download/temperature?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}">Скачать CSV</a></p>
+</div>
+
+<div class="panel">
+  <h2>Обозначения на графике</h2>
+  <p class="meta">Каждый кадр — вертикальный профиль T по высоте z.</p>
+
+  <ul class="legend">
+    <li>
+      <span class="swatch" style="background:#c0392b;"></span>
+      <span class="sym">T(z)</span>
+      <span>температура воздуха в °C. Линия от поверхности (z&asymp;0) до верхней границы (z&asymp;20 км).
+           В кадре показано значение T<sub>surf</sub> (в первой ячейке).</span>
+    </li>
+  </ul>
+
+  <details class="collapsible">
+    <summary>Что происходит со временем</summary>
+    <ol style="line-height:1.7;color:var(--muted);padding-left:1.5em;">
+      <li><b>t = 0 с</b> — начальный профиль: референсная стратификация + тёплый пузырь.</li>
+      <li><b>Всплытие</b> — пузырь поднимается, адиабатически охлаждается (~−9.8 K/км).</li>
+      <li><b>Конденсация</b> — на уровне LCL (Lifting Condensation Level) выделяется скрытое тепло L<sub>v</sub> — профиль становится теплее, чем у сухой адиабаты.</li>
+      <li><b>Зрелость</b> — профиль T в облаке близок к влажной адиабате (≈ −6 K/км).</li>
+      <li><b>Распад</b> — облако оседает, скрытое тепло рассеивается, T возвращается к фону.</li>
+    </ol>
+  </details>
+</div>
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Формулы — как считается T</summary>
+
+    <h3>1. Температура из потенциальной</h3>
+    <div class="formula">
+      T = &theta; &middot; &pi;
+      <span class="desc">Абсолютная температура (K). &pi; — Exner-функция, вычисляется диагностически из плотности и &theta;<sub>v</sub>.</span>
+    </div>
+
+    <h3>2. Exner-функция</h3>
+    <div class="formula">
+      &pi; = (p / p<sub>0</sub>)<sup>R<sub>d</sub>/c<sub>pd</sub></sup>
+      <span class="desc">p<sub>0</sub> = 10<sup>5</sup> Па. В коде &pi; получается через <code>diagnose_exner</code> из уравнения состояния.</span>
+    </div>
+
+    <h3>3. Перевод в Цельсии</h3>
+    <div class="formula">
+      T[°C] = T[K] &minus; 273.15
+      <span class="desc">Физически — сдвиг нуля. Все метрики выводятся в °C.</span>
+    </div>
+
+    <h3>4. Экстраполяция к 2 м</h3>
+    <div class="formula">
+      T<sub>2m</sub> = T[0] + (T[1] &minus; T[0]) &middot; (z<sub>2m</sub> &minus; z[0]) / (z[1] &minus; z[0])
+      <span class="desc">Линейная экстраполяция вниз от первого уровня к высоте 2 м. Стандарт в метеорологии (при отсутствии приземного подслоя).</span>
+    </div>
+  </details>
+</div>
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Допустимые пределы T</summary>
+    <table class="limits">
+      <thead>
+        <tr><th>Величина</th><th>Рабочий диапазон</th><th>Что вне диапазона</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>T у поверхности</td>
+          <td class="num">&minus;50 &hellip; +50 °C</td>
+          <td>Нереалистичные начальные условия</td>
+        </tr>
+        <tr>
+          <td>T на 2 м</td>
+          <td class="num">&minus;50 &hellip; +50 °C</td>
+          <td>Экстраполяция теряет смысл при инверсиях</td>
+        </tr>
+        <tr>
+          <td>T на уровне облака</td>
+          <td class="num">&minus;60 &hellip; +30 °C</td>
+          <td>В тропосфере; выше тропопаузы — уже не облако</td>
+        </tr>
+        <tr>
+          <td>Разница T<sub>surf</sub> &minus; T<sub>2m</sub></td>
+          <td class="num">&minus;10 &hellip; +10 K</td>
+          <td>Больше — сильная инверсия (модель не учитывает)</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
+</div>
+{% endif %}
+
+{% endblock %}
