@@ -15,4 +15,6 @@ venv/
 
 # Editors
 .vscode/
-.idea/
+.idea/# 3D bubble demo figures
+bubble_3d_demo.png
+bubble_3d_rising.png
