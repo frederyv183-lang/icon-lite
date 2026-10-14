@@ -1,5 +1,5 @@
 """
-розовая диагностика: CAPE, LI, светофор грозы.
+Грозовая диагностика: CAPE, LI, светофор грозы.
 
 CAPE (Convective Available Potential Energy) — запасённая энергия
 плавучести для типичной восходящей частицы:
@@ -25,7 +25,7 @@ P_500 = 50000.0      # 500 га, а (стандартный уровень дл�
 
 
 def _esat_tetens(T_K):
-    """авление насыщенного пара по Тетенсу, а."""
+    """Давление насыщенного пара по Тетенсу, а."""
     return 610.78 * np.exp(17.27 * (T_K - 273.15) / (T_K - 35.85))
 
 
@@ -36,9 +36,9 @@ def _qsat(T_K, p_Pa):
 
 
 def _pressure_from_z(z_m, z0=0.0, T0=288.15, Gamma=0.0065, p0=P0):
-    """аротропная оценка давления по высоте (стандартная атмосфера).
+    """Баротропная оценка давления по высоте (стандартная атмосфера).
 
-    Fallback, если exner неизвестен.
+    Fallback, Если exner неизвестен.
     """
     T = T0 - Gamma * np.maximum(z_m - z0, 0.0)
     T = np.maximum(T, 200.0)
@@ -46,7 +46,7 @@ def _pressure_from_z(z_m, z0=0.0, T0=288.15, Gamma=0.0065, p0=P0):
 
 
 def _pressure_from_exner(exner):
-    """авление из Exner-функции (согласовано с моделью):
+    """Давление из Exner-функции (согласовано с моделью):
         p = p0 * exner^(cpd/Rd)
     """
     exner = np.asarray(exner, dtype=float)
@@ -54,7 +54,7 @@ def _pressure_from_exner(exner):
 
 
 def _theta_from_T_p(T_K, p_Pa):
-    """отенциальная температура из T и p."""
+    """Потенциальная температура из T и p."""
     return T_K * (P0 / p_Pa) ** KAPPA
 
 
@@ -65,9 +65,9 @@ def _T_from_theta_p(theta, p_Pa):
 
 def _wet_adiabat_step(theta_part, qv_part, p_Pa, dp_Pa):
     """
-    дин шаг влажноадиабатического подъёма.
+    Один шаг влажноадиабатического подъёма.
 
-    спользуем стандартный влажноадиабатический градиент:
+    Используем стандартный влажноадиабатический градиент:
         dT/dp = (1/p) * (Rd*T + Lv*r_s) / (cpd + Lv^2 * r_s * eps / (Rd*T^2))
     где r_s = q_sat/(1-q_sat) — массовое отношение насыщения.
 
@@ -94,7 +94,7 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
     """
     CAPE для типичной восходящей частицы.
 
-    озвращает dict:
+    Возвращает dict:
         cape_Jkg     : float            CAPE, ж/кг
         lfc_m        : float или None   уровень свободной конвекции, м
         el_m         : float или None   уровень равновесия, м
@@ -112,7 +112,7 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
     if qv_part_surf is None:
         qv_part_surf = float(qv_env[0])
 
-    # авление из exner_env (согласовано с моделью)
+    # Давление из exner_env (согласовано с моделью)
     p_env = _pressure_from_exner(exner_env)
     theta_v_env = theta_env * (1.0 + 1.608 * qv_env) / (1.0 + qv_env)
 
@@ -132,7 +132,7 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
     qv_part_arr = np.empty(nlev)
     theta_part_arr = np.empty(nlev)
 
-    # ачальное состояние частицы
+    # Начальное состояние частицы
     T_p = _T_from_theta_p(theta_part_surf, p_env[0])
     qv_p = qv_part_surf
     saturated = False
@@ -172,10 +172,10 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
         T_part_arr[k] = T_k
         qv_part_arr[k] = qv_k
         theta_part_arr[k] = _theta_from_T_p(T_k, p_k)
-        # иртуальная θ частицы — через T и qv
+        # Виртуальная θ частицы — через T и qv
         th_vp = (T_k * (1.0 + 1.608 * qv_k) / (1.0 + qv_k)) * \
                 (P0 / p_k) ** KAPPA
-        # ыше тропопаузы CAPE не считаем (стратосфера стабильна)
+        # Выше тропопаузы CAPE не считаем (стратосфера стабильна)
         if k > k_trop:
             th_vp = theta_v_env[k] - 1.0  # заведомо < среды
         theta_v_part[k] = th_vp
@@ -218,13 +218,13 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
 
 def _wet_step_T(T_prev, qv_prev, p_prev, p_next):
     """
-    дин шаг подъёма частицы с учётом обеих фаз.
+    Один шаг подъёма частицы с учётом обеих фаз.
 
-    сли qv < qs(T, p) — сухая адиабата (theta = const), qv не меняется.
-    сли qv >= qs(T, p) — влажная адиабата, избыток конденсируется,
+    Если qv < qs(T, p) — сухая адиабата (theta = const), qv не меняется.
+    Если qv >= qs(T, p) — влажная адиабата, избыток конденсируется,
     выделяется скрытое тепло, qv = qs(T, p).
 
-    нтегрируем dT/dp по подшагам:
+    Интегрируем dT/dp по подшагам:
         dT/dp = (1/p) * (Rd*T + Lv*rs) / (cpd + Lv^2 * rs * eps / (Rd*T^2))
     где rs = qs/(1-qs).
     """
@@ -280,7 +280,7 @@ def compute_li(z_mc, theta_env, qv_env, exner_env,
     idx = np.argsort(logp)
     T_env_target = float(np.interp(np.log(p_target), logp[idx], T_env_K[idx]))
 
-    # одъём частицы до p_target
+    # Подъём частицы до p_target
     T_p = _T_from_theta_p(theta_part_surf, p_env[0])
     qv_p = qv_part_surf
     saturated = False
@@ -322,22 +322,22 @@ def storm_index(cape_Jkg, li_K, max_w):
     Светофор грозы.
 
     🟢 спокойно        CAPE < 300
-    🟡 возможен ливень 300 ≤ CAPE < 1000
+    🟡 вВозможен ливень 300 ≤ CAPE < 1000
     🔴 гроза           CAPE ≥ 1000 и max|w| ≥ 15 м/с
     🟠 сильная гроза   CAPE ≥ 2500 и max|w| ≥ 25 м/с
     """
     if cape_Jkg >= 2500.0 and max_w >= 25.0:
         return {"level": "extreme", "color": "#d62828", "emoji": "🟠",
                 "label": "Сильная гроза",
-                "advice": "пасная конвекция. озможны шквалы, град, ливни."}
+                "advice": "Опасная конвекция. Возможны шквалы, град, ливни."}
     if cape_Jkg >= 1000.0 and max_w >= 15.0:
         return {"level": "storm", "color": "#e63946", "emoji": "🔴",
-                "label": "роза",
-                "advice": "Условия для грозы. учево-дождевые облака, ливни."}
+                "label": "Гроза",
+                "advice": "Условия для грозы. Кучево-дождевые облака, ливни."}
     if cape_Jkg >= 300.0:
         return {"level": "shower", "color": "#f4a261", "emoji": "🟡",
-                "label": "озможен ливень",
-                "advice": "Умеренная неустойчивость. озможны локальные ливни."}
+                "label": "Возможен ливень",
+                "advice": "Умеренная неустойчивость. Возможны локальные ливни."}
     return {"level": "calm", "color": "#2a9d8f", "emoji": "🟢",
             "label": "Спокойно",
-            "advice": "Устойчивая стратификация. роз не ожидается."}
+            "advice": "Устойчивая стратификация. Гроз не ожидается."}
