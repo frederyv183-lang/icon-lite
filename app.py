@@ -786,7 +786,7 @@ def storm2d_route():
     params = {"nz": 30, "nx": 40, "x_total": 20.0,
               "dtheta": 2.0, "qv_max": 20.0,
               "zbubble": 2.0, "radius_x": 4.0,
-              "dt": 0.5, "nsteps": 200,
+              "dt": 0.5, "nsteps": 60,
               "use_diffusion": True}
     result = None
     if request.method == "POST":
@@ -1661,7 +1661,7 @@ def route_3d():
         "dtheta": 2.0, "qv_max": 0.0, "z0": 3.0,
         "radius_x": 3.0, "radius_y": 3.0, "radius_z": 1.5,
         "dt": 0.5, "nsteps": 200,
-        "mode": "static", "use_pressure": True,
+        "mode": "static", "use_pressure": False,
     }
     result = None
     if request.method == "POST":

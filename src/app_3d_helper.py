@@ -97,7 +97,8 @@ def run_model_3d_rising(nx, ny, nz,
     t = 0.0
     for step in range(1, int(nsteps) + 1):
         state = step_forward_3d(state, g, dt=dt,
-                                use_pressure=use_pressure)
+                                use_pressure=use_pressure,
+                                n_iter_pressure=200)
         t += dt
         if step % every == 0 and len(snapshots) < int(n_snapshots):
             snapshots.append((t, state["theta"].copy()))
