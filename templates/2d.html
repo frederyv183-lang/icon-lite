@@ -124,8 +124,10 @@
   <div class="formula">
     K<sub>m</sub> = (C<sub>s</sub> &middot; &Delta;)<sup>2</sup> &middot; |S| &middot; max(0, 1 &minus; Ri/Ri<sub>c</sub>)<br>
     Ri = N<sup>2</sup> / |S|<sup>2</sup>, &nbsp; N<sup>2</sup> = (g/&theta;<sub>ref</sub>) &middot; &part;&theta;<sub>v</sub>/&part;z
-    <span class="desc">C<sub>s</sub> = 0.15, Ri<sub>c</sub> = 0.25. В 2D-версии пока не встроена
-       (см. раздел «Ограничения»).</span>
+    <span class="desc">C<sub>s</sub> = 0.15, Ri<sub>c</sub> = 0.25. В 2D-версии встроена:
+       |S|&sup2; включает &part;w/&part;z, &part;v<sub>n</sub>/&part;x и смешанный член
+       (&part;w/&part;x + &part;v<sub>n</sub>/&part;z)&sup2;/2, а &Delta; = &radic;(&Delta;x&middot;&Delta;z).
+       Диффузия применяется к &theta;, q<sub>v</sub>, q<sub>c</sub>, q<sub>r</sub>.</span>
   </div>
 
   <h3>8. Автоконверсия qc &rarr; qr и осаждение</h3>

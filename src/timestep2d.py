@@ -13,12 +13,14 @@ from precipitation import autoconversion, sedimentation_step, evaporation_step
 from exner2d import (perturbation_2d, exner_at_ifc_2d,
                      vertical_gradient_2d, horizontal_gradient_2d)
 from grid2d import interp_to_edge, interp_to_center_from_edge
+from diffusion2d import km_smagorinsky_2d, diffusion_step_2d
 
 
 def step_forward_2d(rho, w, vn, theta, qv, qc, qr,
                     exner_ref_2d, theta_ref_2d,
                     grid, dt,
-                    qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4):
+                    qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4,
+                    use_diffusion=True):
     """
     Один 2D-шаг по времени.
     """
@@ -63,6 +65,35 @@ def step_forward_2d(rho, w, vn, theta, qv, qc, qr,
     vn_new = vn + dt * dvn_dt
     vn_new[:, 0] = 0.0
     vn_new[:, -1] = 0.0
+
+    # 6b. Турбулентная диффузия скалярных полей (Смагоринский + Ri)
+    if use_diffusion:
+        # Строим dz_ifc и dx_ifc (расстояния между центрами)
+        dz_ifc = np.zeros(nz + 1)
+        dz_ifc[1:-1] = 0.5 * (dz[:-1] + dz[1:])
+        dz_ifc[0] = dz[0]
+        dz_ifc[-1] = dz[-1]
+
+        dx_ifc = np.zeros(nx + 1)
+        dx_ifc[1:-1] = 0.5 * (dx[:-1] + dx[1:])
+        dx_ifc[0] = dx[0]
+        dx_ifc[-1] = dx[-1]
+
+        # К_m по актуальным полям
+        theta_v_dyn = virtual_theta(theta, qv)
+        Km = km_smagorinsky_2d(theta_v_dyn, w_new, vn_new,
+                               inv_dz, dz, dz_ifc, dx, dx_ifc)
+
+        # Применяем к скалярным полям
+        theta = diffusion_step_2d(theta, Km, dz, dz_ifc, dx, dx_ifc, dt)
+        qv = diffusion_step_2d(qv, Km, dz, dz_ifc, dx, dx_ifc, dt)
+        qc = diffusion_step_2d(qc, Km, dz, dz_ifc, dx, dx_ifc, dt)
+        qr = diffusion_step_2d(qr, Km, dz, dz_ifc, dx, dx_ifc, dt)
+
+        # Защита от отрицательных значений
+        qv = np.maximum(qv, 0.0)
+        qc = np.maximum(qc, 0.0)
+        qr = np.maximum(qr, 0.0)
 
     # 7. Обновление плотности (2D неразрывность)
     drho = drho_dt_2d(rho, w_new, vn_new, dx, inv_dz)
