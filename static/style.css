@@ -605,3 +605,44 @@ body.dark .nav-group a.active,
 [data-theme="futuristic"] .nav-group a.active {
   background: rgba(88, 166, 255, 0.2);
 }
+
+
+/* Card grid for hub pages */
+.grid-2, .grid-3 {
+  display: grid;
+  gap: 1em;
+  margin: 1em 0;
+}
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+.card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.card-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
+}
+.card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.card h2 { margin-top: 0; font-size: 1.15em; }
+.card p { flex: 1; margin: 0.5em 0 1em; }
+.card-btn {
+  display: inline-block;
+  padding: 0.4em 0.9em;
+  border-radius: 4px;
+  background: rgba(0, 120, 200, 0.12);
+  font-size: 0.9em;
+  font-weight: 600;
+  align-self: flex-start;
+}
+body.dark .card-btn,
+[data-theme="futuristic"] .card-btn {
+  background: rgba(88, 166, 255, 0.2);
+}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Формы эволюции — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Формы эволюции</h1>
+
+<div class="panel">
+  <p>Выберите режим моделирования:</p>
+</div>
+
+<div class="grid-3">
+
+  <a href="/" class="card-link">
+    <div class="panel card">
+      <h2>1D колонка</h2>
+      <p>Одна вертикальная колонка: влажность, конденсация, турбулентность, осадки.</p>
+      <span class="card-btn">Перейти →</span>
+    </div>
+  </a>
+
+  <a href="/2d" class="card-link">
+    <div class="panel card">
+      <h2>2D конвекция</h2>
+      <p>Полное 2D-поле: конвекция, w(x, z), qc, qr, турбулентность Смагоринского.</p>
+      <span class="card-btn">Перейти →</span>
+    </div>
+  </a>
+
+  <a href="/compare" class="card-link">
+    <div class="panel card">
+      <h2>Сравнение 1D / 2D</h2>
+      <p>Сравнение 1D и 2D результатов одного сценария.</p>
+      <span class="card-btn">Перейти →</span>
+    </div>
+  </a>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Гроза — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Гроза</h1>
+
+<div class="panel">
+  <p>Выберите режим грозовой диагностики:</p>
+</div>
+
+<div class="grid-2">
+
+  <a href="/storm" class="card-link">
+    <div class="panel card">
+      <h2>1D гроза</h2>
+      <p>CAPE, LI, светофор, профиль θᵥ(z), метеограмма max|w|(t).</p>
+      <span class="card-btn">Перейти →</span>
+    </div>
+  </a>
+
+  <a href="/storm2d" class="card-link">
+    <div class="panel card">
+      <h2>2D гроза</h2>
+      <p>Карта CAPE(x, z), горизонтальный профиль CAPE(x), LFC(x), EL(x).</p>
+      <span class="card-btn">Перейти →</span>
+    </div>
+  </a>
+
+</div>
+
+{% endblock %}

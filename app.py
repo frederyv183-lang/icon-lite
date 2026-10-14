@@ -938,6 +938,16 @@ def download_storm2d_profile_png():
     )
 
 
+@app.route("/models", methods=["GET"])
+def models_hub():
+    return render_template("models.html", active="models")
+
+
+@app.route("/storm-hub", methods=["GET"])
+def storm_hub():
+    return render_template("storm_hub.html", active="storm-hub")
+
+
 @app.route("/download/1d")
 def download_1d():
     params = {
