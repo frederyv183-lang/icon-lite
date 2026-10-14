@@ -316,7 +316,7 @@ def index():
 
 
 def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps,
-                 dark=False):
+                 dark=False, return_profiles=False):
     g = make_grid2d(nz=nz, nx=nx, x_total=x_total * 1000.0, z_top=20000.0)
     init = make_initial_2d(
         g, None, qv_max=qv_max / 1000.0, dtheta=dtheta,
@@ -347,13 +347,28 @@ def run_model_2d(nz, nx, x_total, dtheta, qv_max, zbubble, radius_x, dt, nsteps,
     image_b64 = make_snapshots_2d(w_hist, qc_hist, qr_hist,
                                   g["x_mc"], g["z_ifc"], g["z_mc"], times,
                                   dark=dark)
-    return {
+
+    # w на интерфейсах (nz+1,) -> интерполируем на центры (nz,) для CSV
+    w_mc = 0.5 * (w[:-1] + w[1:])
+
+    out = {
         "image": image_b64,
         "max_w": float(np.max(np.abs(w))),
         "max_vn": float(np.max(np.abs(vn))),
         "max_qc": float(np.max(qc)) * 1000,
         "max_qr": float(np.max(qr)) * 1000,
     }
+    if return_profiles:
+        out.update({
+            "x_mc": g["x_mc"],
+            "z_mc": g["z_mc"],
+            "w_mc": w_mc,
+            "theta": theta,
+            "qv": qv,
+            "qc": qc,
+            "qr": qr,
+        })
+    return out
 
 
 @app.route("/download/1d")
@@ -387,6 +402,66 @@ def download_1d():
         mimetype="text/csv",
         headers={"Content-Disposition":
                  "attachment; filename=icon_lite_1d.csv"},
+    )
+
+
+@app.route("/download/2d")
+def download_2d():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nz": _get_int("nz", 40),
+        "nx": _get_int("nx", 80),
+        "x_total": _get_float("x_total", 40.0),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 3.0),
+        "radius_x": _get_float("radius_x", 5.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 800),
+    }
+    res = run_model_2d(**params, return_profiles=True)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["x_km", "z_km", "w_ms", "theta_K",
+                     "qv_kgkg", "qc_kgkg", "qr_kgkg"])
+
+    x_km = res["x_mc"] / 1000.0
+    z_km = res["z_mc"] / 1000.0
+    for i in range(len(x_km)):
+        for k in range(len(z_km)):
+            writer.writerow([
+                f"{x_km[i]:.4f}",
+                f"{z_km[k]:.4f}",
+                f"{res['w_mc'][k, i]:.6f}",
+                f"{res['theta'][k, i]:.6f}",
+                f"{res['qv'][k, i]:.8f}",
+                f"{res['qc'][k, i]:.8f}",
+                f"{res['qr'][k, i]:.8f}",
+            ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_2d.csv"},
     )
 
 
