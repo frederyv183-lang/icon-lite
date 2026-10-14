@@ -58,7 +58,8 @@
     </li>
   </ul>
 
-  <h3>Что происходит со временем</h3>
+  <details class="collapsible">
+    <summary>Что происходит со временем</summary>
   <ol style="line-height:1.7;color:var(--muted);padding-left:1.5em;">
     <li><b>t = 0 с</b> — тёплый влажный пузырь в покое, ещё нет конвекции.</li>
     <li><b>Рост</b> — пузырь всплывает, w растёт, воздух адиабатически охлаждается.</li>
@@ -69,10 +70,12 @@
     <li><b>Зрелость / распад</b> — облако растекается, w падает,
         осадки испаряются в подсыхающем слое.</li>
   </ol>
+  </details>
 </div>
 
 <div class="panel">
-  <h2>Формулы модели</h2>
+  <details class="collapsible">
+    <summary>Формулы модели — 7 соотношений + таблица констант</summary>
   <p class="meta">Ниже — соотношения, которые реально считаются в
      <code>src/timestep.py</code>, <code>src/thermo.py</code>,
      <code>src/saturation.py</code>, <code>src/diffusion.py</code>.</p>
@@ -143,11 +146,13 @@
       <tr><td>Молекулярное отношение масс (пар/сухой воздух)</td><td class="num">&epsilon;</td><td class="num">0.622</td></tr>
     </tbody>
   </table>
+  </details>
 </div>
 {% endif %}
 
 <div class="panel">
-  <h2>Допустимые пределы переменных</h2>
+  <details class="collapsible">
+    <summary>Допустимые пределы переменных</summary>
   <p class="meta">Рекомендованные диапазоны для устойчивой работы модели.
      Выход за пределы возможен, но результат может быть нефизичным или численно неустойчивым.</p>
   <table class="limits">
@@ -210,6 +215,7 @@
       </tr>
     </tbody>
   </table>
+  </details>
 </div>
 
 {% endblock %}

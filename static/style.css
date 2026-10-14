@@ -381,3 +381,75 @@ footer a:hover { text-decoration: underline; }
   color: var(--muted);
 }
 [data-theme="futuristic"] footer a { color: var(--link); }
+
+/* ============================================================
+   Сворачиваемые блоки <details> для длинных секций (формулы и т.п.)
+   ============================================================ */
+
+details.collapsible {
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-soft);
+  overflow: hidden;
+  transition: background 0.15s;
+}
+
+details.collapsible[open] {
+  background: transparent;
+}
+
+details.collapsible > summary {
+  cursor: pointer;
+  padding: 0.9em 1.2em;
+  font-weight: 500;
+  font-size: 1.05em;
+  color: var(--text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+details.collapsible > summary::-webkit-details-marker { display: none; }
+details.collapsible > summary::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--accent);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+details.collapsible[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details.collapsible > summary:hover {
+  color: var(--accent);
+  background: rgba(42, 154, 168, 0.05);
+}
+
+details.collapsible > *:not(summary) {
+  padding: 0 1.2em;
+}
+
+details.collapsible > *:not(summary):last-child {
+  padding-bottom: 1em;
+}
+
+/* Тёмная тема */
+[data-theme="futuristic"] details.collapsible {
+  background: rgba(20, 30, 48, 0.4);
+  border-color: var(--border);
+}
+[data-theme="futuristic"] details.collapsible[open] {
+  background: transparent;
+}
+[data-theme="futuristic"] details.collapsible > summary:hover {
+  background: rgba(0, 229, 255, 0.06);
+}

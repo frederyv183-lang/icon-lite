@@ -57,7 +57,8 @@
     </li>
   </ul>
 
-  <h3>Что происходит со временем</h3>
+  <details class="collapsible">
+    <summary>Что происходит со временем</summary>
   <ol style="line-height:1.7;color:var(--muted);padding-left:1.5em;">
     <li><b>t = 0 с</b> — тёплый пузырь в покое, поле однородно.</li>
     <li><b>Всплытие</b> — пузырь поднимается, формируется восходящий поток w.</li>
@@ -67,10 +68,12 @@
     <li><b>Осадки</b> — при достаточном qc включается автоконверсия,
         появляются синие пунктиры qr под облаком.</li>
   </ol>
+  </details>
 </div>
 
 <div class="panel">
-  <h2>Формулы модели (2D)</h2>
+  <details class="collapsible">
+    <summary>Формулы модели (2D) — 8 соотношений</summary>
   <p class="meta">Те же 7 соотношений, что в 1D, плюс уравнение неразрывности
      и горизонтальная составляющая движения.</p>
 
@@ -130,10 +133,12 @@
     &part;q<sub>r</sub>/&part;t + V<sub>t</sub> &middot; &part;q<sub>r</sub>/&part;z = 0, &nbsp; V<sub>t</sub> = 5 м/с
     <span class="desc">q<sub>c,crit</sub> = 5&middot;10<sup>&minus;4</sup> кг/кг, coef = 10<sup>&minus;3</sup> с<sup>&minus;1</sup>.</span>
   </div>
+  </details>
 </div>
 
 <div class="panel">
-  <h2>Допустимые пределы переменных (2D)</h2>
+  <details class="collapsible">
+    <summary>Допустимые пределы переменных (2D)</summary>
   <p class="meta">В 2D жёстче требования к dt (CFL по горизонтали) и к max|w|
      (горизонтальная сходимость усиливает поток).</p>
   <table class="limits">
@@ -190,6 +195,7 @@
       </tr>
     </tbody>
   </table>
+  </details>
 </div>
 {% endif %}
 
