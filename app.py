@@ -27,6 +27,8 @@ from diagnostics import (diagnose_temperature, temperature_celsius,
                          extrapolate_t_2m, extract_t_metrics)
 from fog import (surface_cooling_step_2d, diagnose_fog_flag,
                  visibility_from_qc, fog_metrics)
+from storm import compute_cape, compute_li, storm_index
+from plotting_storm import make_storm_profile
 
 app = Flask(__name__)
 
@@ -530,6 +532,94 @@ def download_temperature():
     )
 
 
+@app.route("/storm", methods=["GET", "POST"])
+def storm_route():
+    params = {"nlev": 40, "dtheta": 2.0, "qv_max": 20.0,
+              "zbubble": 5.0, "dt": 0.5, "nsteps": 1200,
+              "use_diffusion": True}
+    result = None
+    if request.method == "POST":
+        for k in params:
+            if k == "use_diffusion":
+                params[k] = request.form.get(k) is not None
+            else:
+                v = request.form.get(k)
+                if v is None or v.strip() == "":
+                    continue
+                try:
+                    params[k] = int(v) if k in ("nlev", "nsteps") else float(v)
+                except (TypeError, ValueError):
+                    continue
+        result = run_model_1d_storm(**params, dark=_is_dark())
+    return render_template(
+        "storm.html",
+        image=result["image"] if result else None,
+        cape=round(result["cape_Jkg"], 1) if result else None,
+        li=round(result["li_K"], 2) if (result and result["li_K"] is not None) else None,
+        lfc=round(result["lfc_m"], 0) if (result and result["lfc_m"] is not None) else None,
+        el=round(result["el_m"], 0) if (result and result["el_m"] is not None) else None,
+        z_lcl=round(result["z_lcl_m"], 0) if result else None,
+        max_w=round(result["max_w"], 2) if result else None,
+        traffic=result["traffic"] if result else None,
+        active="storm",
+        **params,
+    )
+
+
+@app.route("/download/storm")
+def download_storm():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nlev": _get_int("nlev", 40),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 5.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 1200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_1d_storm(**params, return_profiles=True)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["z_m", "theta_v_env_K", "theta_v_part_K",
+                     "theta_K", "qv_kgkg", "exner", "CAPE_contrib"])
+    for i in range(len(res["z_mc"])):
+        writer.writerow([
+            f"{res['z_mc'][i]:.2f}",
+            f"{res['theta_v_env'][i]:.6f}",
+            f"{res['theta_v_part'][i]:.6f}",
+            f"{res['theta'][i]:.6f}",
+            f"{res['qv'][i]:.8f}",
+            f"{res['exner'][i]:.8f}",
+            f"{res['cape_profile'][i]:.6f}",
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm.csv"},
+    )
+
+
 @app.route("/download/1d")
 def download_1d():
     params = {
@@ -923,6 +1013,102 @@ def fog_route():
         top_fog_m=round(result["top_fog_m"], 1) if result else None,
         **merged,
     )
+
+
+def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
+                        use_diffusion, return_profiles=False, dark=False):
+    """
+    1D-симуляция + грозовая диагностика (CAPE, LI, светофор).
+
+    озвращает: image (профиль θ_v с CAPE), метрики, светофор.
+    """
+    grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
+    z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
+    wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
+    dz = grid["dz"]
+
+    ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0)
+    rho = ref["rho_ref"].copy()
+    theta_ref = ref["theta_ref"]
+    exner_ref = ref["exner_ref"]
+
+    # риземное возмущение: тёплый влажный слой у земли,
+    # экспоненциально убывающий с высотой (типично для конвективного
+    # пограничного слоя).
+    shape = np.exp(-z_mc / (zbubble * 1000.0))
+    theta = theta_ref + dtheta * shape
+    qv = (qv_max / 1000.0) * shape
+    qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
+    w = np.zeros(len(z_ifc))
+
+    exner_now = exner_ref
+    for n in range(nsteps):
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
+                           wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
+                           use_diffusion=use_diffusion, dx=500.0)
+        rho, w = out["rho"], out["w"]
+        theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
+        exner_now = out.get("exner", exner_ref)
+
+    max_w = float(np.max(np.abs(w)))
+
+    # --- розовая диагностика ---
+    # ерём самую тёплую/влажную частицу в приземном слое (0-500 м).
+    theta_v_env = virtual_theta(theta, qv)
+    k_surf = int(np.searchsorted(z_mc, 500.0, side="right"))
+    if k_surf < 1:
+        k_surf = 1
+    theta_part_surf = float(np.max(theta[:k_surf]))
+    qv_part_surf = float(np.max(qv[:k_surf]))
+
+    cape_info = compute_cape(z_mc, theta, qv, exner_now,
+                             theta_part_surf=theta_part_surf,
+                             qv_part_surf=qv_part_surf)
+    li_K = compute_li(z_mc, theta, qv, exner_now,
+                      theta_part_surf=theta_part_surf,
+                      qv_part_surf=qv_part_surf)
+    traffic = storm_index(cape_info["cape_Jkg"], li_K, max_w)
+
+    image_b64 = make_storm_profile(
+        z_mc,
+        theta_v_env=cape_info["theta_v_env"],
+        theta_v_part=cape_info["theta_v_part"],
+        cape_profile=cape_info["cape_profile"],
+        lfc_m=cape_info["lfc_m"],
+        el_m=cape_info["el_m"],
+        z_lcl_m=cape_info["z_lcl_m"],
+        z_trop_m=cape_info.get("z_trop_m"),
+        dark=dark,
+        cape_Jkg=cape_info["cape_Jkg"],
+        li_K=li_K if np.isfinite(li_K) else 0.0,
+        max_w=max_w,
+        traffic=traffic,
+    )
+
+    out = {
+        "image": image_b64,
+        "cape_Jkg": float(cape_info["cape_Jkg"]),
+        "li_K": float(li_K) if np.isfinite(li_K) else None,
+        "lfc_m": cape_info["lfc_m"],
+        "el_m": cape_info["el_m"],
+        "z_lcl_m": cape_info["z_lcl_m"],
+        "z_trop_m": cape_info.get("z_trop_m"),
+        "max_w": max_w,
+        "traffic": traffic,
+    }
+    if return_profiles:
+        out.update({
+            "z_mc": z_mc,
+            "theta_v_env": cape_info["theta_v_env"],
+            "theta_v_part": cape_info["theta_v_part"],
+            "cape_profile": cape_info["cape_profile"],
+            "theta": theta,
+            "qv": qv,
+            "exner": exner_now,
+        })
+    return out
 
 
 @app.route("/download/fog")

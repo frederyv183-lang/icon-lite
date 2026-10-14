@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}Гроза — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Гроза — CAPE, LI, светофор</h1>
+
+<div class="panel">
+  <p>Запускает 1D-симуляцию и считает грозовую диагностику:
+     <b>CAPE</b> (запасённая энергия плавучести),
+     <b>LI</b> (Lifted Index на 500 гПа)
+     и <b>светофор грозы</b>. Профиль виртуальной потенциальной
+     температуры <code>&theta;<sub>v</sub>(z)</code> показан для среды
+     (синяя линия) и типичной восходящей частицы (оранжевая штриховая).
+     Зелёная заливка — зона CAPE между LFC и EL.</p>
+  <form method="post">
+    <label>Уровни: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+    <label>Толщина слоя, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="0.5" max="10"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+    <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
+    <label>Турбулентность: <input type="checkbox" name="use_diffusion" {% if use_diffusion %}checked{% endif %}></label>
+    <br><br>
+    <button type="submit">Запустить грозовую диагностику</button>
+  </form>
+</div>
+
+{% if traffic %}
+<div class="panel" style="border-left: 6px solid {{ traffic.color }};">
+  <h2 style="color: {{ traffic.color }}; margin-top: 0;">
+    {{ traffic.emoji }} {{ traffic.label }}
+  </h2>
+  <p>{{ traffic.advice }}</p>
+
+  <table class="limits">
+    <thead>
+      <tr>
+        <th>CAPE, Дж/кг</th>
+        <th>LI, K</th>
+        <th>max|w|, м/с</th>
+        <th>LFC, м</th>
+        <th>EL, м</th>
+        <th>LCL, м</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{ cape }}</td>
+        <td>{{ li if li is not none else '—' }}</td>
+        <td>{{ max_w }}</td>
+        <td>{{ lfc if lfc is not none else '—' }}</td>
+        <td>{{ el if el is not none else '—' }}</td>
+        <td>{{ z_lcl }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if image %}
+<div class="panel">
+  <h2>Профиль &theta;<sub>v</sub>(z)</h2>
+  <img src="data:image/png;base64,{{ image }}" alt="Профиль theta_v с зоной CAPE"
+       style="max-width: 100%; height: auto;">
+  <p style="margin-top: 1em;">
+    <a href="/download/storm?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}"
+       class="button-link">Скачать CSV</a>
+  </p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Физика: что такое CAPE, LI, LFC, EL</summary>
+
+    <h3>CAPE — Convective Available Potential Energy</h3>
+    <p>Запасённая энергия плавучести для типичной восходящей частицы:</p>
+    <pre>CAPE = &int;<sub>LFC</sub><sup>EL</sup> (g / &theta;<sub>v,env</sub>) &middot; (&theta;<sub>v,part</sub> &minus; &theta;<sub>v,env</sub>) dz</pre>
+    <p>Единицы: <b>Дж/кг</b>. Чем больше CAPE, тем сильнее восходящий поток.</p>
+    <ul>
+      <li>&lt; 300 Дж/кг — 🟢 спокойно</li>
+      <li>300&ndash;1000 — 🟡 возможен ливень</li>
+      <li>&ge; 1000 и max|w| &ge; 15 м/с — 🔴 гроза</li>
+      <li>&ge; 2500 и max|w| &ge; 25 м/с — 🟠 сильная гроза</li>
+    </ul>
+
+    <h3>LI — Lifted Index</h3>
+    <p>Разность температур среды и частицы на 500 гПа:</p>
+    <pre>LI = T<sub>env</sub>(500 гПа) &minus; T<sub>part</sub>(500 гПа)</pre>
+    <p>Отрицательные значения — неустойчиво, положительные — устойчиво.</p>
+    <ul>
+      <li>LI &gt; 0 — устойчиво</li>
+      <li>&minus;2 &hellip; 0 — слабая неустойчивость</li>
+      <li>&minus;6 &hellip; &minus;2 — умеренная (ливни)</li>
+      <li>&lt; &minus;6 — сильная (грозы)</li>
+    </ul>
+
+    <h3>Уровни</h3>
+    <ul>
+      <li><b>LCL</b> (Lifting Condensation Level) — уровень конденсации,
+          где частица становится насыщенной.</li>
+      <li><b>LFC</b> (Level of Free Convection) — уровень, выше которого
+          частица свободно всплывает.</li>
+      <li><b>EL</b> (Equilibrium Level) — уровень равновесия, где плавучесть
+          меняет знак. Верхняя граница CAPE.</li>
+    </ul>
+
+    <h3>Как считается частица</h3>
+    <p>В модели берётся самая тёплая и влажная частица в приземном слое
+       (0&ndash;500 м). До LCL она поднимается <b>сухоадиабатически</b>
+       (&theta; = const), выше — <b>влажноадиабатически</b>, с выделением
+       скрытого тепла при конденсации.</p>
+
+    <h3>Ограничения модели</h3>
+    <p>Модель <code>icon-lite</code> не имеет стратосферы
+       (&theta;<sub>ref</sub> = const до 20 км), поэтому интегрирование CAPE
+       ограничено <b>14 км</b> — условной тропопаузой.</p>
+  </details>
+</div>
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Входные параметры — что означают и на что влияют</summary>
+
+    <table class="limits">
+      <thead>
+        <tr>
+          <th>Параметр</th>
+          <th>Что означает</th>
+          <th>Влияние</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>nlev</code></td>
+          <td>Число вертикальных уровней</td>
+          <td>Больше &rarr; детальнее профиль. 20&ndash;40 — оптимум.</td>
+        </tr>
+        <tr>
+          <td><code>d&theta;</code>, K</td>
+          <td>Избыток &theta; приземного слоя над фоном</td>
+          <td>Главный драйвер CAPE. Больше &rarr; сильнее гроза.</td>
+        </tr>
+        <tr>
+          <td><code>q<sub>v</sub></code>, г/кг</td>
+          <td>Влажность приземного слоя</td>
+          <td>Больше &rarr; больше скрытого тепла, сильнее CAPE.</td>
+        </tr>
+        <tr>
+          <td>Толщина слоя, км</td>
+          <td>Масштаб высоты приземного возмущения</td>
+          <td>Больше &rarr; глубже прогрев, устойчивее.</td>
+        </tr>
+        <tr>
+          <td><code>dt</code>, с</td>
+          <td>Шаг по времени</td>
+          <td>Меньше &rarr; точнее. &gt;2 с — CFL может нарушиться.</td>
+        </tr>
+        <tr>
+          <td><code>nsteps</code></td>
+          <td>Число шагов</td>
+          <td>Общее время = <code>dt &middot; nsteps</code>. Для грозы 200&ndash;1200.</td>
+        </tr>
+        <tr>
+          <td>Турбулентность</td>
+          <td>Вкл/выкл Смагоринский + Ri</td>
+          <td>Вкл &rarr; реалистичнее. Выкл &rarr; «чистая» конвекция.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="note">Типично для грозы: <code>d&theta; = 2&ndash;4 K</code>,
+       <code>q<sub>v</sub> = 15&ndash;20 г/кг</code>,
+       <code>толщина = 1.5&ndash;2.5 км</code>,
+       <code>dt = 0.5 с</code>, <code>nsteps = 400&ndash;1200</code>.</p>
+  </details>
+</div>
+
+{% endblock %}
