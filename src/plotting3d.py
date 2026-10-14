@@ -49,7 +49,7 @@ def make_field_3d(field, grid, dark=False,
 
     if dark:
         plt.style.use("dark_background")
-        bg = "#0d1117"; fg = "#e6edf3"; grid_c = "#30363d"
+        bg = "#1a1d21"; fg = "#e6edf3"; grid_c = "#3a3f47"
     else:
         plt.style.use("default")
         bg = "#ffffff"; fg = "#1f2328"; grid_c = "#d0d7de"
