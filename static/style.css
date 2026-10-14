@@ -569,3 +569,39 @@ details.collapsible > *:not(summary):last-child {
   /* details summary — мельче */
   details.collapsible > summary { font-size: 0.9em; padding: 0.6em 0.8em; }
 }
+
+
+/* Nav group: 1D / 2D / Compare */
+.nav-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  padding: 0;
+  margin: 0 0.5em;
+  overflow: hidden;
+}
+.nav-group a {
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 0.35em 0.7em;
+  border-right: 1px solid #d0d7de;
+}
+.nav-group a:last-child {
+  border-right: none;
+}
+.nav-group a.active {
+  background: rgba(0, 120, 200, 0.15);
+}
+body.dark .nav-group,
+[data-theme="futuristic"] .nav-group {
+  border-color: #30363d;
+}
+body.dark .nav-group a,
+[data-theme="futuristic"] .nav-group a {
+  border-right-color: #30363d;
+}
+body.dark .nav-group a.active,
+[data-theme="futuristic"] .nav-group a.active {
+  background: rgba(88, 166, 255, 0.2);
+}
