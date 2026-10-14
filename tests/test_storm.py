@@ -117,8 +117,8 @@ def test_cape_profile_sums_to_cape():
     assert abs(float(np.sum(res["cape_profile"])) - res["cape_Jkg"]) < 1.0
 
 
-def test_cape_bounded_by_z_top_cape():
-    """EL не выше 14 км (отсечка модели)."""
+def test_cape_bounded_by_z_trop():
+    """EL not above z_trop (auto-detected or model top)."""
     g, ref = _make_atmosphere()
     theta_env = ref["theta_ref"].copy()
     qv_env = 0.005 * np.exp(-g["z_mc"] / 2500.0)
@@ -127,11 +127,12 @@ def test_cape_bounded_by_z_top_cape():
     res = compute_cape(g["z_mc"], theta_env, qv_env, ref["exner_ref"],
                        theta_part_surf=theta_part,
                        qv_part_surf=qv_part)
+    # z_trop_m always present
+    assert "z_trop_m" in res
+    assert res["z_trop_m"] > 0.0
+    # EL must be at or below z_trop
     if res["el_m"] is not None:
-        assert res["el_m"] <= 14500.0
-
-
-# ---------- 4. LI ----------
+        assert res["el_m"] <= res["z_trop_m"] + 1.0
 
 def test_li_zero_for_dry_neutral_atmosphere():
     """Сухая нейтральная атмосфера (qv = 0, theta = const) → LI ≈ 0.

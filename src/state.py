@@ -38,34 +38,66 @@ class State:
     exner_pr: np.ndarray = field(default=None)
 
 
-def make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0, p_surf=101325.0):
+def make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0, p_surf=101325.0,
+                              z_trop=None, dtheta_dz_strat=2.0e-3):
     """
-    Гидростатически равновесная атмосфера с θ = const.
+    Hydrostatically balanced atmosphere (troposphere + optional stratosphere).
 
-    Возвращает:
+    Parameters
+    ----------
+    z_mc, z_ifc : ndarray
+        Heights of cell centers and interfaces.
+    theta_surf : float
+        Potential temperature at the surface, K.
+    p_surf : float
+        Pressure at the surface, Pa.
+    z_trop : float or None
+        Tropopause height, m. If None (default) -- no stratosphere,
+        theta = const at all heights (legacy behavior).
+        If set -- above z_trop, theta grows linearly with gradient
+        dtheta_dz_strat.
+    dtheta_dz_strat : float
+        theta gradient above the tropopause, K/m. Default 2 K/km.
+
+    Returns
+    -------
+    dict with:
         rho_ref   : (nlev,)
         theta_ref : (nlev,)
         exner_ref : (nlev,)
-
-    Формулы:
-        θ(z)   = θ_surf
-        π(z)   = exp(-g·z / (c_pd · θ_surf))
-        ρ(z)   = p0 · π(z) / (R_d · θ_surf)      <-- форма ICON
+        z_trop_m  : float or None
+        is_stable : bool
     """
-    theta_ref = np.full_like(z_mc, theta_surf, dtype=float)
+    z_mc = np.asarray(z_mc, dtype=float)
 
-    # Exner из гидростатики: dπ/dz = -g / (c_pd · θ)
-    exner_ref = np.exp(-G * z_mc / (CPD * theta_surf))
+    if z_trop is None:
+        theta_ref = np.full_like(z_mc, theta_surf, dtype=float)
+        exner_ref = np.exp(-G * z_mc / (CPD * theta_surf))
+        z_trop_m = None
+        is_stable = False
+    else:
+        theta_ref = np.where(z_mc < z_trop,
+                             theta_surf,
+                             theta_surf + dtheta_dz_strat * (z_mc - z_trop))
+        ln_pi = np.empty_like(z_mc)
+        ln_pi[0] = -G * z_mc[0] / (CPD * theta_ref[0])
+        for k in range(1, len(z_mc)):
+            dz = z_mc[k] - z_mc[k - 1]
+            theta_mean = 0.5 * (theta_ref[k] + theta_ref[k - 1])
+            ln_pi[k] = ln_pi[k - 1] - G * dz / (CPD * theta_mean)
+        exner_ref = np.exp(ln_pi)
+        z_trop_m = float(z_trop)
+        is_stable = bool(dtheta_dz_strat > 0.0)
 
-    # плотность из уравнения состояния в форме ICON
     rho_ref = P0 * exner_ref / (RD * theta_ref)
 
     return {
         "rho_ref": rho_ref,
         "theta_ref": theta_ref,
         "exner_ref": exner_ref,
+        "z_trop_m": z_trop_m,
+        "is_stable": is_stable,
     }
-
 
 def diagnose_exner(rho, theta_v, p0=P0, rd=RD):
     """

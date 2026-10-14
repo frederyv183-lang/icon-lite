@@ -116,11 +116,14 @@ def compute_cape(z_mc, theta_env, qv_env, exner_env,
     p_env = _pressure_from_exner(exner_env)
     theta_v_env = theta_env * (1.0 + 1.608 * qv_env) / (1.0 + qv_env)
 
-    # --- тсечка CAPE по высоте ---
-    # одель icon-lite не имеет стратосферы (theta_ref = const везде),
-    # поэтому интегрируем CAPE только до z_top_cape = 14 км.
-    Z_TOP_CAPE = 14000.0
-    k_trop = int(np.searchsorted(z_mc, Z_TOP_CAPE, side="right")) - 1
+    # Auto-detect tropopause:
+    # first level where dtheta_env/dz > 1 K/km on two consecutive levels.
+    dth_dz = np.diff(theta_env) / np.maximum(np.diff(z_mc), 1.0)  # K/m
+    k_trop = nlev - 1
+    for k in range(1, nlev - 2):
+        if dth_dz[k] > 1.0e-3 and dth_dz[k + 1] > 1.0e-3:
+            k_trop = k
+            break
     k_trop = max(1, min(k_trop, nlev - 1))
     z_trop = float(z_mc[k_trop])
 

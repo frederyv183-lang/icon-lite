@@ -1027,7 +1027,9 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
     wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
     dz = grid["dz"]
 
-    ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0)
+    ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0,
+                                z_trop=11000.0,
+                                dtheta_dz_strat=2.0e-3)
     rho = ref["rho_ref"].copy()
     theta_ref = ref["theta_ref"]
     exner_ref = ref["exner_ref"]
