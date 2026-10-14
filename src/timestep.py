@@ -7,6 +7,7 @@ from exner import perturbation, exner_at_ifc, vertical_gradient
 from motion import dw_dt_vertical
 from continuity import drho_dt
 from tracer import step_qv
+from fog import radiative_cooling_step
 from thermo import virtual_theta
 from saturation import saturation_adjustment
 from precipitation import autoconversion, sedimentation_step, evaporation_step
@@ -16,8 +17,12 @@ from diffusion import km_smagorinsky, diffusion_step
 def step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
                  wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
                  use_diffusion=True, dx=500.0,
-                 qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4):
+                 qc_crit=5e-4, autoconv_coef=1e-3, Vt=5.0, evap_coef=1e-4,
+                 radiative_cooling=False, k_rad=1e-4):
     """Один шаг по времени с турбулентной диффузией."""
+    if radiative_cooling:
+        theta = radiative_cooling_step(theta, dt, k_rad=k_rad, theta_ref=theta_ref)
+
     theta_v = virtual_theta(theta, qv)
     exner = diagnose_exner(rho, theta_v)
     pi_pr = perturbation(exner, exner_ref)

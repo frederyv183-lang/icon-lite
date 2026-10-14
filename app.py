@@ -25,6 +25,8 @@ from plotting2d import make_snapshots_2d
 from plotting_t import make_snapshots_temperature
 from diagnostics import (diagnose_temperature, temperature_celsius,
                          extrapolate_t_2m, extract_t_metrics)
+from fog import (surface_cooling_step_2d, diagnose_fog_flag,
+                 visibility_from_qc, fog_metrics)
 
 app = Flask(__name__)
 
@@ -694,6 +696,311 @@ def index_2d():
         max_qc=result["max_qc"] if result else None,
         max_qr=result["max_qr"] if result else None,
         **params,
+    )
+
+
+def run_model_1d_fog(nlev, dtheta, qv_max, zbubble, dt, nsteps,
+                     k_rad, use_diffusion, return_profiles=False):
+    """
+    Радиационный туман в 1D: приземное выхолаживание + конденсация.
+    Возвращает: image (профиль qc(z)), метрики тумана + T.
+    """
+    grid = make_vertical_grid(nlev=nlev, z_top=20000.0, stretch=1.15)
+    z_mc, z_ifc = grid["z_mc"], grid["z_ifc"]
+    wgtfac_c, inv_dz = grid["wgtfac_c"], 1.0 / grid["dz"]
+    dz = grid["dz"]
+
+    ref = make_reference_atmosphere(z_mc, z_ifc, theta_surf=300.0)
+    rho = ref["rho_ref"].copy()
+    theta_ref = ref["theta_ref"]
+    exner_ref = ref["exner_ref"]
+
+    # Ночная инверсия: тонкий слой у поверхности чуть холоднее + высокая влажность
+    shape = np.exp(-((z_mc - zbubble * 1000.0) / 1500.0) ** 2)
+    theta = theta_ref + dtheta * shape
+    # Приземный слой: понижаем theta у первых 2 уровней (инверсия)
+    theta[:2] = theta_ref[:2] - 2.0
+    qv = (qv_max / 1000.0) * np.ones_like(theta)   # влажный слой снизу
+    qv[10:] = (qv_max / 1000.0) * 0.3              # выше — суше
+    qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
+    w = np.zeros(len(z_ifc))
+
+    n_snap = 8
+    snap_every = max(1, nsteps // n_snap)
+    times = [0.0]
+    qc_hist = [qc.copy()]
+    theta_hist = [theta.copy()]
+    exner_hist = [exner_ref.copy()]
+
+    for n in range(nsteps):
+        out = step_forward(rho, w, theta, qv, qc, qr, exner_ref, theta_ref,
+                           wgtfac_c, inv_dz, dz, z_mc, z_ifc, dt,
+                           use_diffusion=use_diffusion, dx=500.0,
+                           radiative_cooling=True, k_rad=k_rad)
+        rho, w = out["rho"], out["w"]
+        theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
+        exner_now = out["exner"]
+
+        if (n + 1) % snap_every == 0 and len(times) < n_snap:
+            times.append((n + 1) * dt)
+            qc_hist.append(qc.copy())
+            theta_hist.append(theta.copy())
+            exner_hist.append(exner_now.copy())
+
+    # График — эволюция профиля qc(z)
+    from plotting_fog import make_snapshots_fog_1d
+    image_b64 = make_snapshots_fog_1d(qc_hist, z_mc, times)
+
+    fm = fog_metrics(qc, z_mc)
+    T_K = diagnose_temperature(theta, exner_now)
+    T_C = temperature_celsius(T_K)
+
+    out = {
+        "image": image_b64,
+        "has_fog": fm["has_fog"],
+        "vis_min_m": fm["vis_min_m"],
+        "qc_surface_gkg": fm["qc_surface_gkg"],
+        "top_fog_m": fm["top_fog_m"],
+        "T_surface_C": float(T_C[0]),
+        "T_2m_C": float(temperature_celsius(
+            extrapolate_t_2m(T_K, z_mc, z_target=2.0))),
+    }
+    if return_profiles:
+        out.update({
+            "z_mc": z_mc,
+            "qc": qc,
+            "T_C": T_C,
+            "vis_m": visibility_from_qc(qc),
+        })
+    return out
+
+
+def run_model_2d_fog(nz, nx, x_total, dtheta, qv_max, zbubble,
+                     radius_x, dt, nsteps, U, k_surf, theta_surf_offset):
+    """
+    двективный туман в 2D: тёплый влажный воздух над холодной поверхностью.
+    озвращает: image (поле qc(x, z)), метрики тумана.
+    """
+    g = make_grid2d(nz=nz, nx=nx, x_total=x_total * 1000.0, z_top=20000.0)
+    z_mc = g["z_mc"]
+
+    # Создаём базовую референсную стратификацию
+    init = make_initial_2d(
+        g, None, qv_max=qv_max / 1000.0, dtheta=0.0,
+        x0_km=x_total / 2.0, z0_km=zbubble,
+        radius_x_km=radius_x, radius_z_km=1.5,
+    )
+    theta_ref_2d = init["theta_ref_2d"]
+
+    # --- равильное начальное условие: тёплый влажный слой внизу ---
+    nz_arr = z_mc.shape[0]
+    # лажность: qv_max в нижних 2 км, потом экспоненциально падает
+    qv_prof = np.where(z_mc < 2000.0,
+                       qv_max / 1000.0,
+                       (qv_max / 1000.0) * np.exp(-(z_mc - 2000.0) / 1500.0))
+    # Тёплый слой: theta_ref + dtheta в нижних 2 км
+    theta_prof = np.where(z_mc < 2000.0,
+                          theta_ref_2d[:, 0] + dtheta,
+                          theta_ref_2d[:, 0] + dtheta * np.exp(-(z_mc - 2000.0) / 1500.0))
+
+    theta = np.tile(theta_prof[:, None], (1, nx))
+    qv = np.tile(qv_prof[:, None], (1, nx))
+    qc = np.zeros_like(theta)
+    qr = np.zeros_like(theta)
+
+    # идростатика: rho = референсная плотность
+    rho = init["rho"].copy()
+
+    # Скорости — нули
+    w = np.zeros((nz + 1, nx))
+    vn = np.zeros((nz, nx + 1))
+
+    # иагностика Exner
+    theta_v_ref = virtual_theta(theta_ref_2d, np.zeros_like(qv))
+    exner_ref_2d = diagnose_exner(rho, virtual_theta(theta, qv))
+
+    # Холодная поверхность
+    theta_surf = float(theta[0, 0]) - theta_surf_offset
+
+    # Слой тумана — до 200 м
+    k_h = int(np.searchsorted(z_mc, 200.0, side="right"))
+    if k_h < 1:
+        k_h = 1
+
+    n_snap = 8
+    snap_every = max(1, nsteps // n_snap)
+    times = [0.0]
+    qc_hist = [qc.copy()]
+    w_hist = [w.copy()]
+
+    for n in range(nsteps):
+        # Шаг динамики + физики
+        out = step_forward_2d(rho, w, vn, theta, qv, qc, qr,
+                              exner_ref_2d, theta_ref_2d, g, dt)
+        rho, w, vn = out["rho"], out["w"], out["vn"]
+        theta, qv, qc = out["theta"], out["qv"], out["qc"]
+        qr = out["qr"]
+
+        # риземное охлаждение в слое до 200 м
+        for k in range(k_h):
+            theta[k, :] = theta[k, :] - k_surf * U * (theta[k, :] - theta_surf) * dt
+
+        if (n + 1) % snap_every == 0 and len(times) < n_snap:
+            times.append((n + 1) * dt)
+            qc_hist.append(qc.copy())
+            w_hist.append(w.copy())
+
+    from plotting_fog import make_snapshots_fog_2d
+    image_b64 = make_snapshots_fog_2d(qc_hist,
+                                      g["x_mc"], g["z_ifc"], g["z_mc"], times)
+
+    fm = fog_metrics(qc, g["z_mc"])
+
+    return {
+        "image": image_b64,
+        "has_fog": fm["has_fog"],
+        "vis_min_m": fm["vis_min_m"],
+        "qc_surface_gkg": fm["qc_surface_gkg"],
+        "top_fog_m": fm["top_fog_m"],
+    }
+
+
+@app.route("/fog", methods=["GET", "POST"])
+def fog_route():
+    # Параметры 1D (радиационный)
+    params_1d = {"nlev": 40, "dtheta": 2.0, "qv_max": 20.0,
+                 "zbubble": 5.0, "dt": 0.5, "nsteps": 600,
+                 "k_rad": 1.0e-4, "use_diffusion": True}
+    # Параметры 2D (адвективный)
+    params_2d = {"nz": 40, "nx": 80, "x_total": 40.0, "dtheta": 2.0,
+                 "qv_max": 20.0, "zbubble": 3.0, "radius_x": 5.0,
+                 "dt": 0.5, "nsteps": 600,
+                 "U": 5.0, "k_surf": 5.0e-4, "theta_surf_offset": 3.0}
+
+    mode = "radiative"
+    result = None
+
+    if request.method == "POST":
+        mode = request.form.get("mode", "radiative")
+        if mode == "advective":
+            for k in params_2d:
+                v = request.form.get(k)
+                if v is None or v.strip() == "":
+                    continue
+                try:
+                    params_2d[k] = int(v) if k in ("nz", "nx", "nsteps") else float(v)
+                except (TypeError, ValueError):
+                    continue
+            result = run_model_2d_fog(**params_2d)
+        else:
+            for k in params_1d:
+                if k == "use_diffusion":
+                    params_1d[k] = request.form.get(k) is not None
+                else:
+                    v = request.form.get(k)
+                    if v is None or v.strip() == "":
+                        continue
+                    try:
+                        params_1d[k] = int(v) if k in ("nlev", "nsteps") else float(v)
+                    except (TypeError, ValueError):
+                        continue
+            result = run_model_1d_fog(**params_1d)
+
+    # Объединяем params_2d и params_1d без конфликта общих ключей
+    merged = dict(params_2d)
+    merged.update(params_1d)   # 1D-версия перекрывает общие
+
+    return render_template(
+        "fog.html",
+        active="fog",
+        mode=mode,
+        image=result["image"] if result else None,
+        has_fog=result["has_fog"] if result else None,
+        vis_min_m=round(result["vis_min_m"], 1) if result else None,
+        qc_surface_gkg=round(result["qc_surface_gkg"], 3) if result else None,
+        top_fog_m=round(result["top_fog_m"], 1) if result else None,
+        **merged,
+    )
+
+
+@app.route("/download/fog")
+def download_fog():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    mode = request.args.get("mode", "radiative")
+
+    if mode == "radiative":
+        params = {
+            "nlev": _get_int("nlev", 40),
+            "dtheta": _get_float("dtheta", 2.0),
+            "qv_max": _get_float("qv_max", 20.0),
+            "zbubble": _get_float("zbubble", 5.0),
+            "dt": _get_float("dt", 0.5),
+            "nsteps": _get_int("nsteps", 600),
+            "k_rad": _get_float("k_rad", 1e-4),
+            "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+        }
+        res = run_model_1d_fog(**params, return_profiles=True)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["z_m", "qc_kgkg", "T_C", "vis_m"])
+        for i in range(len(res["z_mc"])):
+            writer.writerow([
+                f"{res['z_mc'][i]:.2f}",
+                f"{res['qc'][i]:.8f}",
+                f"{res['T_C'][i]:.4f}",
+                f"{res['vis_m'][i]:.1f}",
+            ])
+    else:
+        # Адвективный — экспортируем как 2D-поле (x, z, qc)
+        params = {
+            "nz": _get_int("nz", 40),
+            "nx": _get_int("nx", 80),
+            "x_total": _get_float("x_total", 40.0),
+            "dtheta": _get_float("dtheta", 2.0),
+            "qv_max": _get_float("qv_max", 20.0),
+            "zbubble": _get_float("zbubble", 3.0),
+            "radius_x": _get_float("radius_x", 5.0),
+            "dt": _get_float("dt", 0.5),
+            "nsteps": _get_int("nsteps", 600),
+            "U": _get_float("U", 5.0),
+            "k_surf": _get_float("k_surf", 5e-4),
+            "theta_surf_offset": _get_float("theta_surf_offset", 3.0),
+        }
+        res = run_model_2d_fog(**params)
+        # Упрощённый экспорт — метаданные + последнее поле qc недоступно через res
+        # Оставим CSV с метриками
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["metric", "value"])
+        writer.writerow(["has_fog", res["has_fog"]])
+        writer.writerow(["vis_min_m", res["vis_min_m"]])
+        writer.writerow(["qc_surface_gkg", res["qc_surface_gkg"]])
+        writer.writerow(["top_fog_m", res["top_fog_m"]])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_fog.csv"},
     )
 
 

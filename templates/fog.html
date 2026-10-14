@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Туман — icon-lite{% endblock %}
+{% block content %}
+
+<h1>Туман</h1>
+
+<div class="panel">
+  <p>Два типа тумана в одной модели.</p>
+
+  <form method="post" id="fog-form">
+    <fieldset style="border:1px solid var(--border);border-radius:8px;padding:0.8em 1.2em;margin-bottom:1em;">
+      <legend style="padding:0 0.5em;color:var(--muted);">Тип тумана</legend>
+      <label style="margin-right:1.5em;">
+        <input type="radio" name="mode" value="radiative"
+               {% if mode != 'advective' %}checked{% endif %}
+               onchange="toggleMode()">
+        Радиационный (1D) — ночное выхолаживание
+      </label>
+      <label>
+        <input type="radio" name="mode" value="advective"
+               {% if mode == 'advective' %}checked{% endif %}
+               onchange="toggleMode()">
+        Адвективный (2D) — тёплый воздух над холодной поверхностью
+      </label>
+    </fieldset>
+
+    <!-- Общие поля -->
+    <div id="common-fields">
+      <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0" max="20"></label>
+      <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="30"></label>
+      <label>z пузыря, км: <input type="number" name="zbubble" value="{{ zbubble }}" step="0.5" min="0.5" max="15"></label>
+      <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.05" min="0.05" max="2"></label>
+      <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="100" max="5000"></label>
+    </div>
+
+    <!-- Поля радиационного (1D) -->
+    <div id="rad-fields" style="display:none;">
+      <label>Уровни: <input type="number" name="nlev" value="{{ nlev }}" min="10" max="100"></label>
+      <label>k_rad, 1/с: <input type="number" name="k_rad" value="{{ k_rad }}" step="0.00001" min="0" max="0.001"></label>
+      <label>Турбулентность: <input type="checkbox" name="use_diffusion" {% if use_diffusion %}checked{% endif %}></label>
+    </div>
+
+    <!-- Поля адвективного (2D) -->
+    <div id="adv-fields" style="display:none;">
+      <label>Верт. уровни: <input type="number" name="nz" value="{{ nz }}" min="10" max="100"></label>
+      <label>Гор. ячейки: <input type="number" name="nx" value="{{ nx }}" min="20" max="200"></label>
+      <label>Ширина, км: <input type="number" name="x_total" value="{{ x_total }}" step="5" min="10" max="200"></label>
+      <label>радиус_x, км: <input type="number" name="radius_x" value="{{ radius_x }}" step="0.5" min="1" max="20"></label>
+      <label>Ветер U, м/с: <input type="number" name="U" value="{{ U }}" step="0.5" min="0" max="30"></label>
+      <label>k_surf, 1/с: <input type="number" name="k_surf" value="{{ k_surf }}" step="0.0001" min="0" max="0.005"></label>
+      <label>ΔT поверхности, K: <input type="number" name="theta_surf_offset" value="{{ theta_surf_offset }}" step="0.5" min="0" max="15"></label>
+    </div>
+
+    <br>
+    <button type="submit">Запустить</button>
+  </form>
+</div>
+
+<script>
+function toggleMode() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  document.getElementById('rad-fields').style.display = (mode === 'radiative') ? 'block' : 'none';
+  document.getElementById('adv-fields').style.display = (mode === 'advective') ? 'block' : 'none';
+}
+toggleMode();
+</script>
+
+{% if image %}
+<div class="panel">
+  <h2>
+    {% if mode == 'advective' %}Поле qc(x, z) — адвективный туман{% else %}Профиль qc(z) — радиационный туман{% endif %}
+  </h2>
+  <p class="meta">
+    Туман: <b>{% if has_fog %}ДА{% else %}нет{% endif %}</b>
+    {% if has_fog %}
+      &nbsp;|&nbsp; видимость (мин.): <b>{{ vis_min_m }} м</b>
+      &nbsp;|&nbsp; верх. граница: {{ top_fog_m }} м
+    {% endif %}
+    &nbsp;|&nbsp; qc у земли: {{ qc_surface_gkg }} г/кг
+  </p>
+  <img src="data:image/png;base64,{{ image }}" alt="fog">
+  <p>
+    <a class="btn" href="/download/fog?mode={{ mode }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}{% if mode == 'radiative' %}&nlev={{ nlev }}&k_rad={{ k_rad }}&use_diffusion={{ 1 if use_diffusion else 0 }}{% else %}&nz={{ nz }}&nx={{ nx }}&x_total={{ x_total }}&radius_x={{ radius_x }}&U={{ U }}&k_surf={{ k_surf }}&theta_surf_offset={{ theta_surf_offset }}{% endif %}">Скачать CSV</a>
+  </p>
+</div>
+
+<div class="panel">
+  <h2>Обозначения</h2>
+  <ul class="legend">
+    <li>
+      <span class="swatch" style="background:#00c800;"></span>
+      <span class="sym">qc</span>
+      <span>облачная вода. Когда qc &gt; 0 в приземном слое (z &lt; 200 м) — это <b>туман</b>.</span>
+    </li>
+    <li>
+      <span class="swatch" style="background:#7dd3fc;"></span>
+      <span class="sym">vis</span>
+      <span>видимость, м. Эмпирически: vis &asymp; 0.02 / qc.</span>
+    </li>
+  </ul>
+
+  <h3>Радиационный vs адвективный</h3>
+  <table class="limits">
+    <thead>
+      <tr><th>Признак</th><th>Радиационный (1D)</th><th>Адвективный (2D)</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Механизм</td>
+        <td>Ночное охлаждение поверхности</td>
+        <td>Тёплый воздух над холодной поверхностью</td>
+      </tr>
+      <tr>
+        <td>Где в природе</td>
+        <td>Суша, ясная тихая ночь</td>
+        <td>Море, весна/осень; снег зимой</td>
+      </tr>
+      <tr>
+        <td>Ветер</td>
+        <td>Слабый (штиль)</td>
+        <td>Умеренный (2–10 м/с)</td>
+      </tr>
+      <tr>
+        <td>Толщина</td>
+        <td>10–100 м</td>
+        <td>100–500 м</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Формулы тумана</summary>
+
+    <h3>1. Радиационное охлаждение (1D)</h3>
+    <div class="formula">
+      &part;&theta;<sub>0</sub>/&part;t = &minus;k<sub>rad</sub> &middot; (&theta;<sub>0</sub> &minus; &theta;<sub>ref,0</sub>)
+      <span class="desc">Приземный слой остывает, пока не достигнет референса (который сам со временем смещается). Скорость — k_rad.</span>
+    </div>
+
+    <h3>2. Адвективное охлаждение (2D)</h3>
+    <div class="formula">
+      &part;&theta;<sub>0</sub>/&part;t = &minus;k<sub>surf</sub> &middot; U &middot; (&theta;<sub>0</sub> &minus; &theta;<sub>surf</sub>)
+      <span class="desc">Чем быстрее приносится воздух (U), тем быстрее он отдаёт тепло холодной поверхности.</span>
+    </div>
+
+    <h3>3. Конденсация</h3>
+    <div class="formula">
+      q<sub>v</sub> &gt; q<sub>sat</sub>(T, p) &nbsp;&rarr;&nbsp; q<sub>c</sub> &gt; 0
+      <span class="desc">При остывании q_sat падает; избыток пара переходит в qc — туман.</span>
+    </div>
+
+    <h3>4. Видимость</h3>
+    <div class="formula">
+      vis &asymp; 0.02 / q<sub>c</sub>  [м, при q<sub>c</sub> в кг/кг]
+      <span class="desc">Эмпирическая формула для тёплого тумана. При qc = 0.05 г/кг → vis ≈ 400 м.</span>
+    </div>
+  </details>
+</div>
+{% endif %}
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Входные параметры — что означают и на что влияют</summary>
+    <table class="limits">
+      <thead>
+        <tr><th>Параметр</th><th>Что означает</th><th>Влияние</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>k_rad</code></td>
+          <td>Скорость радиационного охлаждения, 1/с</td>
+          <td>Больше → туман быстрее. Типично 10<sup>&minus;5</sup>&hellip;10<sup>&minus;3</sup>.</td>
+        </tr>
+        <tr>
+          <td><code>U</code>, м/с</td>
+          <td>Скорость ветра (адвективный)</td>
+          <td>Больше → быстрее охлаждение над холодной поверхностью. 2&ndash;10 м/с — реалистично.</td>
+        </tr>
+        <tr>
+          <td><code>k_surf</code>, 1/с</td>
+          <td>Коэффициент приземного теплообмена</td>
+          <td>5&middot;10<sup>&minus;4</sup> — умеренный. Больше → резче охлаждение.</td>
+        </tr>
+        <tr>
+          <td><code>&theta;_surf_offset</code>, K</td>
+          <td>Разница T между поверхностью и воздухом</td>
+          <td>3&ndash;8 K — реалистично. Больше → гуще туман.</td>
+        </tr>
+        <tr>
+          <td><code>qv</code>, г/кг</td>
+          <td>Начальная влажность</td>
+          <td>Больше → туман образуется раньше. 10&ndash;20 г/кг.</td>
+        </tr>
+        <tr>
+          <td><code>nsteps</code></td>
+          <td>Число шагов</td>
+          <td>Туман формируется за 200&ndash;600 шагов при dt = 0.5 с.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="note">
+      <b>Рекомендуемый пресет радиационного тумана:</b> <code>d&theta;=0, qv=15 г/кг, z=1 км, k_rad=5&middot;10<sup>&minus;4</sup>, nsteps=600</code>.<br>
+      <b>Рекомендуемый пресет адвективного тумана:</b> <code>d&theta;=1 K, qv=18 г/кг, U=5 м/с, &theta;_surf_offset=5 K, nsteps=600</code>.
+    </p>
+  </details>
+</div>
+
+{% endblock %}
