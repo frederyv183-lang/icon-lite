@@ -453,3 +453,119 @@ details.collapsible > *:not(summary):last-child {
 [data-theme="futuristic"] details.collapsible > summary:hover {
   background: rgba(0, 229, 255, 0.06);
 }
+
+/* ============================================================
+   МОБИЛЬНАЯ АДАПТАЦИЯ
+   ============================================================ */
+
+/* Планшеты */
+@media (max-width: 1024px) {
+  body { max-width: 100%; padding: 0 1em 2.5em; }
+}
+
+/* Узкие планшеты / крупные телефоны */
+@media (max-width: 768px) {
+  body { padding: 0 0.8em 2em; }
+
+  /* Шапка — в столбик */
+  header.navbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.8em 1em;
+    gap: 0.6em;
+  }
+  header.navbar nav {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.3em;
+  }
+  header.navbar nav a {
+    padding: 0.4em 0.7em;
+    font-size: 0.9em;
+  }
+  header.navbar nav a.active::after {
+    left: 0.7em;
+    right: 0.7em;
+    bottom: 0.05em;
+  }
+
+  /* Заголовки — меньше */
+  h1 { font-size: 1.4em; padding-left: 0.5em; border-left-width: 3px; }
+  h2 { font-size: 1.15em; }
+  h3 { font-size: 1em; }
+
+  /* Карточки — плотнее */
+  .panel, .card { padding: 1em; margin-bottom: 1em; }
+
+  /* Формы — вертикально */
+  form label {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 0.8em;
+  }
+  input[type=number], input[type=text] {
+    width: 100%;
+    max-width: 200px;
+    margin-left: 0.3em;
+  }
+  input[type=checkbox] { transform: scale(1.3); }
+
+  /* Кнопка — во всю ширину */
+  button[type=submit], .btn {
+    width: 100%;
+    text-align: center;
+    padding: 0.9em 1.2em;
+  }
+
+  /* Таблицы — горизонтальный скролл */
+  table.limits {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    font-size: 0.85em;
+  }
+  table.limits th, table.limits td { padding: 0.4em 0.6em; }
+
+  /* Формулы — уменьшить */
+  .formula {
+    font-size: 0.85em;
+    padding: 0.5em 0.8em;
+    word-break: break-word;
+  }
+  .formula .desc { font-size: 0.8em; }
+
+  /* Легенда — компактнее */
+  ul.legend { font-size: 0.88em; }
+  ul.legend .sym { min-width: 2.5em; }
+
+  /* details — компактнее */
+  details.collapsible > summary {
+    padding: 0.7em 0.9em;
+    font-size: 0.95em;
+  }
+  details.collapsible > *:not(summary) { padding: 0 0.9em; }
+}
+
+/* Телефоны */
+@media (max-width: 480px) {
+  body { padding: 0 0.6em 1.5em; }
+
+  header.navbar { padding: 0.7em 0.8em; }
+  header.navbar .brand { font-size: 1em; }
+  header.navbar nav a { font-size: 0.85em; padding: 0.35em 0.55em; }
+
+  h1 { font-size: 1.2em; }
+
+  .panel, .card { padding: 0.8em; }
+
+  .formula { font-size: 0.78em; }
+
+  /* График — уменьшить радиусы */
+  img { border-radius: 6px; }
+
+  /* Кнопка CSV — во всю ширину */
+  .btn { font-size: 0.9em; padding: 0.8em 1em; }
+
+  /* details summary — мельче */
+  details.collapsible > summary { font-size: 0.9em; padding: 0.6em 0.8em; }
+}
