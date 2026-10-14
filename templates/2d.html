@@ -22,6 +22,79 @@
   </form>
 </div>
 
+<div class="panel">
+  <details class="collapsible">
+    <summary>Входные параметры — что означают и на что влияют</summary>
+
+    <table class="limits">
+      <thead>
+        <tr>
+          <th>Параметр</th>
+          <th>Что означает</th>
+          <th>Влияние</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>nz</code></td>
+          <td>Число вертикальных уровней</td>
+          <td>То же, что <code>nlev</code> в 1D. 20&ndash;60 — оптимум.</td>
+        </tr>
+        <tr>
+          <td><code>nx</code></td>
+          <td>Число горизонтальных ячеек</td>
+          <td>Больше → детальнее по x, но рендер × <code>nx</code>.
+              80&ndash;120 — оптимум.</td>
+        </tr>
+        <tr>
+          <td><code>x_total</code>, км</td>
+          <td>Ширина области по x</td>
+          <td>Мало → пузырь упирается в границы.
+              Много → разрежение ячеек, слабее разрешение.</td>
+        </tr>
+        <tr>
+          <td><code>d&theta;</code>, K</td>
+          <td>Превышение потенциальной температуры</td>
+          <td>То же, но в 2D даёт <b>более сильные <code>w</code></b>
+              за счёт горизонтальной сходимости.</td>
+        </tr>
+        <tr>
+          <td><code>q<sub>v</sub></code>, г/кг</td>
+          <td>Начальная влажность пузыря</td>
+          <td>То же, что в 1D. Больше → сильнее осадки.</td>
+        </tr>
+        <tr>
+          <td><code>z</code> пузыря, км</td>
+          <td>Высота центра по z</td>
+          <td>То же, что в 1D.</td>
+        </tr>
+        <tr>
+          <td><code>radius_x</code>, км</td>
+          <td>Горизонтальный радиус пузыря</td>
+          <td>Больше → шире область подъёма, медленнее «схлопывание».
+              &gt;20 км — пузырь упирается в границы.</td>
+        </tr>
+        <tr>
+          <td><code>dt</code>, с</td>
+          <td>Шаг по времени</td>
+          <td>В 2D жёстче, чем в 1D: 0.05&ndash;0.5 с
+              (CFL по горизонтали).</td>
+        </tr>
+        <tr>
+          <td><code>nsteps</code></td>
+          <td>Число шагов симуляции</td>
+          <td>То же. 800&ndash;1200 обычно достаточно.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="note">Типичные начальные условия: <code>nz=40, nx=80, x_total=40 км</code>,
+       <code>d&theta;=2 K, q<sub>v</sub>=20 г/кг, z=3 км, radius_x=5 км</code>,
+       <code>dt=0.5 с, nsteps=800</code>. При <code>d&theta;=3 K, q<sub>v</sub>=25 г/кг</code>
+       достигается <code>max|w| &asymp; 60 м/с</code> — устойчивая граница.</p>
+  </details>
+</div>
+
 {% if image %}
 <div class="panel">
   <h2>Эволюция конвективного облака (2D)</h2>
