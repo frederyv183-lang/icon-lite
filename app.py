@@ -1646,6 +1646,76 @@ def download_fog():
     )
 
 
+# =====================================================================
+# 3D bubble page
+# =====================================================================
+
+from app_3d_helper import run_model_3d, run_model_3d_rising
+
+
+@app.route("/3d", methods=["GET", "POST"])
+def route_3d():
+    params = {
+        "nx": 24, "ny": 24, "nz": 16,
+        "x_total": 20.0, "y_total": 20.0, "z_top": 15.0,
+        "dtheta": 2.0, "qv_max": 0.0, "z0": 3.0,
+        "radius_x": 3.0, "radius_y": 3.0, "radius_z": 1.5,
+        "dt": 0.5, "nsteps": 200,
+        "mode": "static", "use_pressure": True,
+    }
+    result = None
+    if request.method == "POST":
+        for k in params:
+            if k == "use_pressure":
+                params[k] = request.form.get(k) is not None
+            elif k == "mode":
+                params[k] = request.form.get(k, "static")
+            else:
+                v = request.form.get(k)
+                if v is None or v.strip() == "":
+                    continue
+                try:
+                    if k in ("nx", "ny", "nz", "nsteps"):
+                        params[k] = int(v)
+                    else:
+                        params[k] = float(v)
+                except (TypeError, ValueError):
+                    continue
+
+        dark = _is_dark()
+        if params["mode"] == "rising":
+            result = run_model_3d_rising(
+                nx=params["nx"], ny=params["ny"], nz=params["nz"],
+                x_total=params["x_total"], y_total=params["y_total"],
+                z_top=params["z_top"],
+                dtheta=params["dtheta"], qv_max=params["qv_max"],
+                z0=params["z0"],
+                radius_x=params["radius_x"],
+                radius_y=params["radius_y"],
+                radius_z=params["radius_z"],
+                dt=params["dt"], nsteps=params["nsteps"],
+                use_pressure=params["use_pressure"],
+                dark=dark,
+            )
+        else:
+            result = run_model_3d(
+                nx=params["nx"], ny=params["ny"], nz=params["nz"],
+                x_total=params["x_total"], y_total=params["y_total"],
+                z_top=params["z_top"],
+                dtheta=params["dtheta"], qv_max=params["qv_max"],
+                z0=params["z0"],
+                radius_x=params["radius_x"],
+                radius_y=params["radius_y"],
+                radius_z=params["radius_z"],
+                dark=dark,
+            )
+
+    ctx = {"active": "3d", **params}
+    if result:
+        ctx.update(result)
+    return render_template("3d.html", **ctx)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

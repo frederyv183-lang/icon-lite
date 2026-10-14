@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}3D пузырь — icon-lite{% endblock %}
+{% block content %}
+
+<h1>3D — теплый пузырь в плоскости (x, y, z)</h1>
+
+<div class="panel">
+  <p>Начальные условия и эволюция 3D-пузыря с проекцией давления (Jacobi). Сетка равномерная по z.</p>
+  <form method="post">
+    <label>Точек x: <input type="number" name="nx" value="{{ nx }}" min="8" max="48"></label>
+    <label>Точек y: <input type="number" name="ny" value="{{ ny }}" min="8" max="48"></label>
+    <label>Уровней z: <input type="number" name="nz" value="{{ nz }}" min="8" max="32"></label>
+    <label>X всего, км: <input type="number" name="x_total" value="{{ x_total }}" step="5" min="10" max="60"></label>
+    <label>Y всего, км: <input type="number" name="y_total" value="{{ y_total }}" step="5" min="10" max="60"></label>
+    <label>Z верх, км: <input type="number" name="z_top" value="{{ z_top }}" step="5" min="10" max="30"></label>
+    <label>d&theta;, K: <input type="number" name="dtheta" value="{{ dtheta }}" step="0.5" min="0.5" max="6"></label>
+    <label>qv, г/кг: <input type="number" name="qv_max" value="{{ qv_max }}" step="1" min="0" max="20"></label>
+    <label>z пузыря, км: <input type="number" name="z0" value="{{ z0 }}" step="0.5" min="1" max="10"></label>
+    <label>r_x, км: <input type="number" name="radius_x" value="{{ radius_x }}" step="0.5" min="1" max="10"></label>
+    <label>r_y, км: <input type="number" name="radius_y" value="{{ radius_y }}" step="0.5" min="1" max="10"></label>
+    <label>r_z, км: <input type="number" name="radius_z" value="{{ radius_z }}" step="0.5" min="0.5" max="5"></label>
+    <label>dt, с: <input type="number" name="dt" value="{{ dt }}" step="0.1" min="0.1" max="1"></label>
+    <label>Шагов: <input type="number" name="nsteps" value="{{ nsteps }}" min="50" max="600"></label>
+    <label>Режим:
+      <select name="mode">
+        <option value="static"{% if mode == "static" %} selected{% endif %}>Начальный пузырь</option>
+        <option value="rising"{% if mode == "rising" %} selected{% endif %}>Всплытие</option>
+      </select>
+    </label>
+    <label>Давление: <input type="checkbox" name="use_pressure" {% if use_pressure %}checked{% endif %}></label>
+    <br><br>
+    <button type="submit">Запустить 3D</button>
+  </form>
+</div>
+
+{% if image_initial %}
+<div class="panel">
+  <h2>Начальный пузырь — 3 среза</h2>
+  <img src="data:image/png;base64,{{ image_initial }}" alt="3D bubble initial" style="max-width:100%;height:auto;">
+  <table class="limits" style="margin-top:1em;">
+    <tbody>
+      <tr><td>max d&theta;</td><td>{{ max_dtheta }} K</td></tr>
+      <tr><td>min d&theta;</td><td>{{ min_dtheta }} K</td></tr>
+      <tr><td>max q<sub>v</sub></td><td>{{ max_qv_gkg }} г/кг</td></tr>
+      <tr><td>Ячеек</td><td>{{ n_cells }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if image_rising %}
+<div class="panel">
+  <h2>Всплытие — 6 кадров</h2>
+  <img src="data:image/png;base64,{{ image_rising }}" alt="3D bubble rising" style="max-width:100%;height:auto;">
+  <table class="limits" style="margin-top:1em;">
+    <tbody>
+      <tr><td>max |w|</td><td>{{ max_w }} м/с</td></tr>
+      <tr><td>Финальное t</td><td>{{ final_t }} с</td></tr>
+      <tr><td>Кадров</td><td>{{ n_snapshots }}</td></tr>
+      <tr><td>Давление</td><td>{{ "вкл" if use_pressure else "выкл" }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="panel">
+  <details class="collapsible">
+    <summary>Что здесь происходит</summary>
+    <p>Строится сферический тёплый пузырь в центре домена. Статический режим показывает начальное поле в 3 срезах (x-y, x-z, y-z). Режим «всплытие» прогоняет модель (aдвекция + плавучесть + проекция давления Jacobi) и рисует 6 кадров x-z разреза.</p>
+  </details>
+</div>
+
+{% endblock %}
