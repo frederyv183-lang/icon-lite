@@ -1,15 +1,11 @@
 """
-3D initial conditions: spherical warm bubble in the middle of the domain.
-
-Array layout for all fields: (nz, ny, nx). w is on interfaces: (nz+1, ny, nx).
+3D initial conditions: spherical warm bubble. All fields (nz, ny, nx).
 """
 import numpy as np
 
 
 def _reference_atmosphere(z_mc, theta_surf=300.0, dtheta_dz=0.0035):
-    """Simple reference: linear theta increase with height."""
-    theta_ref = float(theta_surf) + float(dtheta_dz) * np.asarray(z_mc)
-    return theta_ref
+    return float(theta_surf) + float(dtheta_dz) * np.asarray(z_mc)
 
 
 def make_initial_3d(grid, theta_ref=None,
@@ -17,62 +13,25 @@ def make_initial_3d(grid, theta_ref=None,
                     x0_km=None, y0_km=None, z0_km=3.0,
                     radius_x_km=5.0, radius_y_km=5.0, radius_z_km=1.5,
                     theta_surf=300.0):
-    """
-    Build 3D initial state: warm bubble in the middle of the domain.
-
-    Parameters
-    ----------
-    grid : dict from make_grid3d
-    theta_ref : (nz,) or None
-        If None, use linear profile theta_surf + 0.0035 * z.
-    dtheta : float, K
-        Peak theta anomaly at bubble center.
-    qv_max : float, kg/kg
-        Peak water vapor mixing ratio at bubble center.
-    x0_km, y0_km : float or None
-        Horizontal bubble center; if None -> domain center.
-    z0_km : float
-        Vertical bubble center.
-    radius_x_km, radius_y_km, radius_z_km : float
-        Gaussian radii in x, y, z directions.
-
-    Returns
-    -------
-    dict with keys (all (nz, ny, nx) unless noted):
-      theta, qv, qc, rho, u, v, theta_ref_3d
-    plus w : (nz+1, ny, nx) on interfaces.
-    """
-    x_mc = grid["x_mc"]
-    y_mc = grid["y_mc"]
-    z_mc = grid["z_mc"]
-    nx = grid["nx"]
-    ny = grid["ny"]
-    nz = grid["nz"]
+    x_mc = grid["x_mc"]; y_mc = grid["y_mc"]; z_mc = grid["z_mc"]
+    nx = grid["nx"]; ny = grid["ny"]; nz = grid["nz"]
 
     x_total = float(x_mc[-1] + (x_mc[1] - x_mc[0]) * 0.5)
     y_total = float(y_mc[-1] + (y_mc[1] - y_mc[0]) * 0.5)
 
-    if x0_km is None:
-        x0 = x_total * 0.5
-    else:
-        x0 = float(x0_km) * 1000.0
-    if y0_km is None:
-        y0 = y_total * 0.5
-    else:
-        y0 = float(y0_km) * 1000.0
+    x0 = float(x0_km) * 1000.0 if x0_km is not None else x_total * 0.5
+    y0 = float(y0_km) * 1000.0 if y0_km is not None else y_total * 0.5
     z0 = float(z0_km) * 1000.0
 
     rx = float(radius_x_km) * 1000.0
     ry = float(radius_y_km) * 1000.0
     rz = float(radius_z_km) * 1000.0
 
-    # Broadcast to (nz, ny, nx)
-    X = x_mc[None, None, :]     # (1, 1, nx)
-    Y = y_mc[None, :, None]     # (1, ny, 1)
-    Z = z_mc[:, None, None]     # (nz, 1, 1)
-
+    X = x_mc[None, None, :]
+    Y = y_mc[None, :, None]
+    Z = z_mc[:, None, None]
     r2 = ((X - x0) / rx) ** 2 + ((Y - y0) / ry) ** 2 + ((Z - z0) / rz) ** 2
-    shape = np.exp(-r2)         # (nz, ny, nx)
+    shape = np.exp(-r2)
 
     if theta_ref is None:
         theta_ref_1d = _reference_atmosphere(z_mc, theta_surf=theta_surf)
@@ -82,30 +41,21 @@ def make_initial_3d(grid, theta_ref=None,
             raise ValueError("theta_ref must have shape (nz,)")
 
     theta_ref_3d = np.broadcast_to(
-        theta_ref_1d[:, None, None], (nz, ny, nx)
-    ).copy()
+        theta_ref_1d[:, None, None], (nz, ny, nx)).copy()
 
     theta = theta_ref_3d + float(dtheta) * shape
     qv = float(qv_max) * shape
 
-    # Density: simple exponential reference, hydrostatic-ish
-    H = 8000.0
-    rho_surf = 1.2
+    H = 8000.0; rho_surf = 1.2
     rho_1d = rho_surf * np.exp(-z_mc / H)
     rho = np.broadcast_to(rho_1d[:, None, None], (nz, ny, nx)).copy()
 
     qc = np.zeros((nz, ny, nx), dtype=float)
     u = np.zeros((nz, ny, nx), dtype=float)
     v = np.zeros((nz, ny, nx), dtype=float)
-    w = np.zeros((nz + 1, ny, nx), dtype=float)
+    w = np.zeros((nz, ny, nx), dtype=float)
 
     return {
-        "theta": theta,
-        "qv": qv,
-        "qc": qc,
-        "rho": rho,
-        "u": u,
-        "v": v,
-        "w": w,
-        "theta_ref_3d": theta_ref_3d,
+        "theta": theta, "qv": qv, "qc": qc, "rho": rho,
+        "u": u, "v": v, "w": w, "theta_ref_3d": theta_ref_3d,
     }
