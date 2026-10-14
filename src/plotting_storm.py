@@ -1,10 +1,10 @@
 """
-изуализация грозовой диагностики: профиль θ_v(z) с зоной CAPE.
+Визуализация грозовой диагностики: профиль θ_v(z) с зоной CAPE.
 
 - Синяя линия — θ_v среды
-- ранжевая штриховая — θ_v частицы
-- елёная закраска — зона CAPE (где θ_v_part > θ_v_env)
-- тмечены уровни LCL, LFC, EL
+- Оранжевая штриховая — θ_v частицы
+- Зелёная закраска — Зона CAPE (где θ_v_part > θ_v_env)
+- Отмечены уровни LCL, LFC, EL
 """
 import io
 import base64
@@ -22,9 +22,9 @@ def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
                        cape_Jkg=None, li_K=None, max_w=0.0,
                        traffic=None):
     """
-    рофиль θ_v(z) с закрашенной зоной CAPE.
+    Профиль θ_v(z) с закрашенной зоной CAPE.
 
-    озвращает base64-строку PNG.
+    Возвращает base64-строку PNG.
     """
     if dark:
         plt.style.use("dark_background")
@@ -48,7 +48,7 @@ def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
 
     z_km = z_mc / 1000.0
 
-    # она CAPE: закрашиваем между θ_v_env и θ_v_part там, где cape_profile > 0
+    # Зона CAPE: Закрашиваем между θ_v_env и θ_v_part там, где cape_profile > 0
     mask = cape_profile > 0.0
     if np.any(mask):
         idx = np.where(mask)[0]
@@ -67,7 +67,7 @@ def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
     ax.plot(theta_v_env, z_km, color=col_env, linewidth=2.0,
             label=r"Среда $\theta_v$")
     ax.plot(theta_v_part, z_km, color=col_part, linewidth=2.0,
-            linestyle="--", label=r"астица $\theta_v$")
+            linestyle="--", label=r"Частица $\theta_v$")
 
     xlo = float(min(theta_v_env.min(), theta_v_part.min()))
     xhi = float(max(theta_v_env.max(), theta_v_part.max()))
@@ -95,7 +95,7 @@ def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
 
     ax.set_xlabel(r"$\theta_v$, K", fontsize=10, color=fg)
     ax.set_ylabel("z, км", fontsize=10, color=fg)
-    ax.set_title("рофиль виртуальной потенциальной температуры",
+    ax.set_title("Профиль виртуальной потенциальной температуры",
                  fontsize=11, color=fg)
     ax.tick_params(colors=fg, labelsize=9)
     for s in ax.spines.values():
@@ -104,7 +104,7 @@ def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
     ax.legend(loc="upper right", fontsize=9, facecolor=bg,
               edgecolor=grid, labelcolor=fg)
 
-    # одпись с числами внизу
+    # Подпись с числами внизу
     if cape_Jkg is not None and li_K is not None:
         info = f"CAPE = {cape_Jkg:.0f} ж/кг   LI = {li_K:.1f} K   max|w| = {max_w:.1f} м/с"
         ax.text(0.5, -0.08, info, transform=ax.transAxes,
@@ -181,7 +181,7 @@ def make_storm_timeseries(times, w_max_hist, dark=False,
 
     ax.set_xlabel("t, с", fontsize=10, color=fg)
     ax.set_ylabel(r"max$|w|$, м/с", fontsize=10, color=fg)
-    ax.set_title("волюция вертикальной скорости", fontsize=11, color=fg)
+    ax.set_title("Эволюция вертикальной скорости", fontsize=11, color=fg)
     ax.tick_params(colors=fg, labelsize=9)
     for s in ax.spines.values():
         s.set_color(grid)
