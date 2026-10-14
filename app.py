@@ -28,7 +28,8 @@ from diagnostics import (diagnose_temperature, temperature_celsius,
 from fog import (surface_cooling_step_2d, diagnose_fog_flag,
                  visibility_from_qc, fog_metrics)
 from storm import compute_cape, compute_li, storm_index
-from plotting_storm import make_storm_profile
+from plotting_storm import (make_storm_profile,
+                           make_storm_profile_bytes)
 
 app = Flask(__name__)
 
@@ -620,6 +621,44 @@ def download_storm():
     )
 
 
+@app.route("/download/storm.png")
+def download_storm_png():
+    def _get_int(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return default
+
+    def _get_float(name, default):
+        v = request.args.get(name)
+        if v is None or v.strip() == "":
+            return default
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return default
+
+    params = {
+        "nlev": _get_int("nlev", 40),
+        "dtheta": _get_float("dtheta", 2.0),
+        "qv_max": _get_float("qv_max", 20.0),
+        "zbubble": _get_float("zbubble", 5.0),
+        "dt": _get_float("dt", 0.5),
+        "nsteps": _get_int("nsteps", 1200),
+        "use_diffusion": request.args.get("use_diffusion", "1") == "1",
+    }
+    res = run_model_1d_storm(**params, return_png=True)
+    return Response(
+        res["png_bytes"],
+        mimetype="image/png",
+        headers={"Content-Disposition":
+                 "attachment; filename=icon_lite_storm.png"},
+    )
+
+
 @app.route("/download/1d")
 def download_1d():
     params = {
@@ -1016,7 +1055,8 @@ def fog_route():
 
 
 def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
-                        use_diffusion, return_profiles=False, dark=False):
+                        use_diffusion, return_profiles=False, dark=False,
+                        return_png=False):
     """
     1D-симуляция + грозовая диагностика (CAPE, LI, светофор).
 
@@ -1073,8 +1113,8 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
                       qv_part_surf=qv_part_surf)
     traffic = storm_index(cape_info["cape_Jkg"], li_K, max_w)
 
-    image_b64 = make_storm_profile(
-        z_mc,
+    _profile_args = dict(
+        z_mc=z_mc,
         theta_v_env=cape_info["theta_v_env"],
         theta_v_part=cape_info["theta_v_part"],
         cape_profile=cape_info["cape_profile"],
@@ -1088,9 +1128,16 @@ def run_model_1d_storm(nlev, dtheta, qv_max, zbubble, dt, nsteps,
         max_w=max_w,
         traffic=traffic,
     )
+    png_bytes = None
+    if return_png:
+        png_bytes = make_storm_profile_bytes(**_profile_args)
+        image_b64 = None
+    else:
+        image_b64 = make_storm_profile(**_profile_args)
 
     out = {
         "image": image_b64,
+        "png_bytes": png_bytes,
         "cape_Jkg": float(cape_info["cape_Jkg"]),
         "li_K": float(li_K) if np.isfinite(li_K) else None,
         "lfc_m": cape_info["lfc_m"],

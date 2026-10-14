@@ -63,9 +63,11 @@
   <img src="data:image/png;base64,{{ image }}" alt="Профиль theta_v с зоной CAPE"
        style="max-width: 100%; height: auto;">
   <p style="margin-top: 1em;">
-    <a href="/download/storm?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}"
-       class="button-link">Скачать CSV</a>
-  </p>
+  <a href="/download/storm?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}"
+     class="button-link">Скачать CSV</a>
+  <a href="/download/storm.png?nlev={{ nlev }}&dtheta={{ dtheta }}&qv_max={{ qv_max }}&zbubble={{ zbubble }}&dt={{ dt }}&nsteps={{ nsteps }}&use_diffusion={{ 1 if use_diffusion else 0 }}"
+     class="button-link" style="margin-left: 0.5em;">Скачать PNG</a>
+</p>
 </div>
 {% endif %}
 

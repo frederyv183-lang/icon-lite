@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 
 
-def make_storm_profile(z_mc, theta_v_env, theta_v_part, cape_profile,
+def make_storm_profile_bytes(z_mc, theta_v_env, theta_v_part, cape_profile,
                        lfc_m=None, el_m=None, z_lcl_m=None,
                        z_trop_m=None, dark=False,
                        cape_Jkg=None, li_K=None, max_w=0.0,
@@ -116,4 +116,10 @@ def make_storm_profile(z_mc, theta_v_env, theta_v_part, cape_profile,
                 facecolor=bg)
     plt.close(fig)
     buf.seek(0)
-    return base64.b64encode(buf.read()).decode("ascii")
+    return buf.read()
+
+
+def make_storm_profile(*args, **kwargs):
+    """Backward compat: returns base64-encoded PNG (ascii str)."""
+    png_bytes = make_storm_profile_bytes(*args, **kwargs)
+    return base64.b64encode(png_bytes).decode("ascii")
