@@ -1,7 +1,9 @@
 """
-3D visualization: three orthogonal slices through a warm bubble.
+3D visualization: three orthogonal slices through a field.
 
-Main entry point: make_bubble_3d(theta, grid, dark=False) -> base64 PNG.
+Main entry points:
+  - make_field_3d(field, grid, ...)  - universal
+  - make_bubble_3d(theta, grid, ...) - backward-compat wrapper
 """
 import base64
 import io
@@ -18,66 +20,50 @@ def _as_3d(arr):
     return arr
 
 
-def make_bubble_3d(theta, grid, dark=False,
-                   theta_ref=None, title="3D warm bubble",
-                   n_ticks=5):
+def make_field_3d(field, grid, dark=False,
+                  field_ref=None, title="3D field",
+                  cmap="YlOrRd", units="",
+                  symmetric=False, diverging_cmap="RdBu_r"):
     """
-    Three orthogonal slices through the bubble centre.
+    Three orthogonal slices through the centre of a 3D field.
 
-    Parameters
-    ----------
-    theta : (nz, ny, nx) potential temperature
-    grid : dict from make_grid3d
-    dark : bool
-    theta_ref : (nz,) or (nz, ny, nx) or None
-        If provided, the anomaly theta - theta_ref is plotted.
-    title : str
-    n_ticks : int
-        Number of ticks per axis.
-
-    Returns
-    -------
-    str : base64-encoded PNG.
+    symmetric=True -> diverging colormap centred at 0 (good for w).
+    Returns base64 PNG.
     """
-    theta = _as_3d(np.asarray(theta, dtype=float))
-
+    field = _as_3d(np.asarray(field, dtype=float))
     x_mc = grid["x_mc"]; y_mc = grid["y_mc"]; z_mc = grid["z_mc"]
-    nz, ny, nx = theta.shape
+    nz, ny, nx = field.shape
 
-    if theta.shape != (nz, ny, nx):
-        raise ValueError("theta shape does not match grid")
+    label = title if not units else (title + ", " + units)
 
-    field = theta.copy()
-    label = "theta, K"
-    if theta_ref is not None:
-        tr = np.asarray(theta_ref, dtype=float)
+    if field_ref is not None:
+        tr = np.asarray(field_ref, dtype=float)
         if tr.shape == (nz,):
             tr = tr[:, None, None]
         if tr.shape != field.shape:
-            raise ValueError("theta_ref shape mismatch")
+            raise ValueError("field_ref shape mismatch")
         field = field - tr
-        label = "theta - theta_ref, K"
+        label = (title + " - ref") if not units else (title + " - ref, " + units)
 
-    # centre indices
-    i0 = nx // 2
-    j0 = ny // 2
-    k0 = nz // 2
+    i0 = nx // 2; j0 = ny // 2; k0 = nz // 2
 
     if dark:
         plt.style.use("dark_background")
-        bg = "#0d1117"
-        fg = "#e6edf3"
-        grid_c = "#30363d"
+        bg = "#0d1117"; fg = "#e6edf3"; grid_c = "#30363d"
     else:
         plt.style.use("default")
-        bg = "#ffffff"
-        fg = "#1f2328"
-        grid_c = "#d0d7de"
+        bg = "#ffffff"; fg = "#1f2328"; grid_c = "#d0d7de"
 
-    vmin = float(np.min(field))
-    vmax = float(np.max(field))
-    if vmax <= vmin:
-        vmax = vmin + 1.0
+    if symmetric:
+        vmax = float(np.max(np.abs(field))) or 1.0
+        vmin = -vmax
+        use_cmap = diverging_cmap
+    else:
+        vmin = float(np.min(field))
+        vmax = float(np.max(field))
+        if vmax <= vmin:
+            vmax = vmin + 1.0
+        use_cmap = cmap
 
     x_km = x_mc / 1000.0
     y_km = y_mc / 1000.0
@@ -86,12 +72,10 @@ def make_bubble_3d(theta, grid, dark=False,
     fig, axes = plt.subplots(1, 3, figsize=(15.0, 4.6), facecolor=bg)
     fig.suptitle(title, color=fg, fontsize=12)
 
-    # --- Panel 1: horizontal slice at z = z_mc[k0] (x-y plane) ---
     ax = axes[0]
     ax.set_facecolor(bg)
-    slice_xy = field[k0, :, :]
-    im = ax.pcolormesh(x_km, y_km, slice_xy,
-                       cmap="YlOrRd", vmin=vmin, vmax=vmax,
+    im = ax.pcolormesh(x_km, y_km, field[k0, :, :],
+                       cmap=use_cmap, vmin=vmin, vmax=vmax,
                        shading="nearest")
     ax.set_xlabel("x, km", color=fg)
     ax.set_ylabel("y, km", color=fg)
@@ -101,12 +85,10 @@ def make_bubble_3d(theta, grid, dark=False,
     for s in ax.spines.values():
         s.set_edgecolor(grid_c)
 
-    # --- Panel 2: vertical slice at y = y_mc[j0] (x-z plane) ---
     ax = axes[1]
     ax.set_facecolor(bg)
-    slice_xz = field[:, j0, :]     # (nz, nx)
-    im = ax.pcolormesh(x_km, z_km, slice_xz,
-                       cmap="YlOrRd", vmin=vmin, vmax=vmax,
+    im = ax.pcolormesh(x_km, z_km, field[:, j0, :],
+                       cmap=use_cmap, vmin=vmin, vmax=vmax,
                        shading="nearest")
     ax.set_xlabel("x, km", color=fg)
     ax.set_ylabel("z, km", color=fg)
@@ -115,12 +97,10 @@ def make_bubble_3d(theta, grid, dark=False,
     for s in ax.spines.values():
         s.set_edgecolor(grid_c)
 
-    # --- Panel 3: vertical slice at x = x_mc[i0] (y-z plane) ---
     ax = axes[2]
     ax.set_facecolor(bg)
-    slice_yz = field[:, :, i0]     # (nz, ny)
-    im = ax.pcolormesh(y_km, z_km, slice_yz,
-                       cmap="YlOrRd", vmin=vmin, vmax=vmax,
+    im = ax.pcolormesh(y_km, z_km, field[:, :, i0],
+                       cmap=use_cmap, vmin=vmin, vmax=vmax,
                        shading="nearest")
     ax.set_xlabel("y, km", color=fg)
     ax.set_ylabel("z, km", color=fg)
@@ -131,7 +111,6 @@ def make_bubble_3d(theta, grid, dark=False,
 
     fig.subplots_adjust(left=0.05, right=0.93, top=0.88, bottom=0.10,
                         wspace=0.30)
-
     cax = fig.add_axes([0.945, 0.15, 0.012, 0.70])
     cb = fig.colorbar(im, cax=cax)
     cb.set_label(label, color=fg)
@@ -143,7 +122,18 @@ def make_bubble_3d(theta, grid, dark=False,
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+def make_field_3d_bytes(field, grid, **kwargs):
+    return base64.b64decode(make_field_3d(field, grid, **kwargs))
+
+
+def make_bubble_3d(theta, grid, dark=False,
+                   theta_ref=None, title="3D warm bubble"):
+    return make_field_3d(theta, grid, dark=dark,
+                         field_ref=theta_ref,
+                         title=title,
+                         cmap="YlOrRd", units="K",
+                         symmetric=False)
+
+
 def make_bubble_3d_bytes(theta, grid, **kwargs):
-    """Same as make_bubble_3d but returns raw PNG bytes."""
-    b64 = make_bubble_3d(theta, grid, **kwargs)
-    return base64.b64decode(b64)
+    return base64.b64decode(make_bubble_3d(theta, grid, **kwargs))

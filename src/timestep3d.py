@@ -31,7 +31,8 @@ def _advect_upwind(field, u, v, w, grid, dt):
 
 
 def step_forward_3d(state, grid, dt,
-                    use_advection=True, use_buoyancy=True):
+                    use_advection=True, use_buoyancy=True,
+                    use_pressure=False, n_iter_pressure=3000):
     theta = state["theta"]; qv = state["qv"]
     u = state["u"]; v = state["v"]; w = state["w"]
     theta_ref = state["theta_ref_3d"]
@@ -58,6 +59,16 @@ def step_forward_3d(state, grid, dt,
     if use_buoyancy:
         b = G * (theta_new - theta_ref) / theta_ref
         w_new = w_new + dt * b
+
+    if use_pressure:
+        try:
+            from pressure3d import project_divergence_free
+            u_new, v_new, w_new, _phi, _db, _da = project_divergence_free(
+                u_new, v_new, w_new, grid, dt,
+                n_iter=n_iter_pressure,
+            )
+        except ImportError:
+            pass
 
     return {
         "theta": theta_new, "qv": qv_new,

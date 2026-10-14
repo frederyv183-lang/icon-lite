@@ -35,3 +35,24 @@ def test_make_bubble_3d_returns_png():
                                theta_ref=init["theta_ref_3d"])
     assert isinstance(png, bytes)
     assert png[:8] == PNG_SIG
+
+
+def test_make_field_3d_symmetric():
+    from grid3d import make_grid3d
+    from state3d import make_initial_3d
+    from plotting3d import make_field_3d
+    import base64 as _b64
+
+    g = make_grid3d(nx=12, ny=12, nz=8,
+                    x_total=20000.0, y_total=20000.0,
+                    z_top=10000.0, stretch=1.0)
+    init = make_initial_3d(g, dtheta=2.0, qv_max=0.0,
+                           z0_km=2.0, radius_x_km=2.0,
+                           radius_y_km=2.0, radius_z_km=1.0)
+
+    b64 = make_field_3d(init["w"], g, dark=False,
+                        title="w", units="m/s", symmetric=True)
+    assert isinstance(b64, str)
+    raw = _b64.b64decode(b64)
+    assert raw[:8] == PNG_SIG
+    assert len(raw) > 5000

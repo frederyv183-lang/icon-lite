@@ -9,6 +9,11 @@ def _stretch_z(nz, z_top, stretch):
     """Stretched vertical levels: geometric growth of dz towards top."""
     if nz < 2:
         return np.array([0.0, float(z_top)]), np.array([float(z_top)])
+    # Uniform grid: stretch == 1.0 (needed for FFT Poisson solver)
+    if abs(float(stretch) - 1.0) < 1e-12:
+        dz = np.full(nz, float(z_top) / nz)
+        z_ifc = np.linspace(0.0, float(z_top), nz + 1)
+        return z_ifc, dz
     # Ratio such that sum of geometric series of dz = z_top
     # dz_k = dz0 * stretch^k, k = 0..nz-1
     # dz0 * (stretch^nz - 1) / (stretch - 1) = z_top

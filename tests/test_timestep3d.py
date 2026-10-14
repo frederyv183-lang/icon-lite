@@ -53,3 +53,21 @@ def test_step3d_cfl_warning():
         warnings.simplefilter("always")
         step_forward_3d(s2, g, dt=1.0)
     assert any("CFL" in str(x.message) for x in w)
+
+
+def test_step3d_use_pressure():
+    from grid3d import make_grid3d
+    from state3d import make_initial_3d
+    g = make_grid3d(nx=8, ny=8, nz=8, x_total=20000.0, y_total=20000.0,
+                    z_top=8000.0, stretch=1.0)
+    s = make_initial_3d(g, dtheta=2.0, qv_max=0.0,
+                        z0_km=2.0, radius_x_km=3.0,
+                        radius_y_km=3.0, radius_z_km=1.5)
+    out_plain = step_forward_3d(s, g, dt=0.5)
+    out_press = step_forward_3d(s, g, dt=0.5,
+                                use_pressure=True, n_iter_pressure=500)
+    for key in ('theta', 'qv', 'u', 'v', 'w'):
+        assert out_plain[key].shape == out_press[key].shape
+    assert np.all(np.isfinite(out_press['u']))
+    assert np.all(np.isfinite(out_press['v']))
+    assert np.all(np.isfinite(out_press['w']))

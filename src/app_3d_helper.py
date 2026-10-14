@@ -15,7 +15,6 @@ import numpy as np
 from grid3d import make_grid3d
 from state3d import make_initial_3d
 from timestep3d import step_forward_3d
-from pressure3d import project_divergence_free
 from plotting3d import make_bubble_3d, make_bubble_3d_bytes
 
 
@@ -97,14 +96,8 @@ def run_model_3d_rising(nx, ny, nz,
 
     t = 0.0
     for step in range(1, int(nsteps) + 1):
-        state = step_forward_3d(state, g, dt=dt)
-        if use_pressure:
-            u, v, w, phi, db, da = project_divergence_free(
-                state["u"], state["v"], state["w"], g, dt=dt,
-            )
-            state["u"] = u
-            state["v"] = v
-            state["w"] = w
+        state = step_forward_3d(state, g, dt=dt,
+                                use_pressure=use_pressure)
         t += dt
         if step % every == 0 and len(snapshots) < int(n_snapshots):
             snapshots.append((t, state["theta"].copy()))
